@@ -1,10 +1,12 @@
-﻿using Microsoft.VisualStudio.Shell;
+﻿using MarcusRunge.CleanArchitectureProjectGenerator.Commands;
+using MarcusRunge.CleanArchitectureProjectGenerator.Views;
+using Microsoft.VisualStudio.Shell;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace CleanArchitectureProjectGenerator
+namespace MarcusRunge.CleanArchitectureProjectGenerator
 {
     /// <summary>
     /// This is the class that implements the package exposed by this assembly.
@@ -25,6 +27,8 @@ namespace CleanArchitectureProjectGenerator
     /// </remarks>
     [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
     [Guid(CleanArchitectureProjectGeneratorPackage.PackageGuidString)]
+    [ProvideMenuResource("Menus.ctmenu", 1)]
+    [ProvideToolWindow(typeof(ProjectCreatorToolWindow))]
     public sealed class CleanArchitectureProjectGeneratorPackage : AsyncPackage
     {
         /// <summary>
@@ -45,7 +49,8 @@ namespace CleanArchitectureProjectGenerator
         {
             // When initialized asynchronously, the current thread may be a background thread at this point.
             // Do any initialization that requires the UI thread after switching to the UI thread.
-            await this.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+            await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+            await ProjectCreatorToolWindowCommand.InitializeAsync(this);
         }
 
         #endregion
