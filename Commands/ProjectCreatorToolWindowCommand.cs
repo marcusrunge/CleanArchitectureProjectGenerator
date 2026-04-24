@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using Task = System.Threading.Tasks.Task;
+using MarcusRunge.CleanArchitectureProjectGenerator.ViewModels;
 
 namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
 {
@@ -99,6 +100,16 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
             }
 
             IVsWindowFrame windowFrame = (IVsWindowFrame)window.Frame;
+            // Resolve the view model registered in the package and set it as the DataContext for the control
+            ThreadHelper.JoinableTaskFactory.Run(async () =>
+            {
+                var vmObj = await this.package.GetServiceAsync(typeof(ProjectCreatorToolWindowViewModel));
+                if (vmObj is ProjectCreatorToolWindowViewModel vm && window.Content is ProjectCreatorToolWindowControl control)
+                {
+                    control.DataContext = vm;
+                }
+            });
+
             Microsoft.VisualStudio.ErrorHandler.ThrowOnFailure(windowFrame.Show());
         }
     }

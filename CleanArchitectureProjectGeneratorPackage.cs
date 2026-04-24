@@ -1,6 +1,9 @@
 ﻿using MarcusRunge.CleanArchitectureProjectGenerator.Commands;
+using MarcusRunge.CleanArchitectureProjectGenerator.ViewModels;
 using MarcusRunge.CleanArchitectureProjectGenerator.Views;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.Shell;
+using Prism.Ioc;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -31,6 +34,8 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator
     [ProvideToolWindow(typeof(ProjectCreatorToolWindow))]
     public sealed class CleanArchitectureProjectGeneratorPackage : AsyncPackage
     {
+        private IServiceCollection _serviceCollection = new ServiceCollection();
+        private IServiceProvider? _serviceProvider;
         /// <summary>
         /// CleanArchitectureProjectGeneratorPackage GUID string.
         /// </summary>
@@ -49,8 +54,31 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator
         {
             // When initialized asynchronously, the current thread may be a background thread at this point.
             // Do any initialization that requires the UI thread after switching to the UI thread.
+            _serviceCollection.AddTransient<ProjectCreatorToolWindowViewModel>();
+            _serviceProvider = _serviceCollection.BuildServiceProvider();
             await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+            // Register the view model as a Visual Studio service using the AsyncServiceCreatorCallback
+            // Return a completed Task so the callback matches the expected signature
+            AddService(typeof(ProjectCreatorToolWindowViewModel), (container, ct, serviceType) => Task.FromResult<object?>(_serviceProvider!.GetService(serviceType)), true);
             await ProjectCreatorToolWindowCommand.InitializeAsync(this);
+        }
+
+        /// <summary>
+        /// Dispose managed resources like the built IServiceProvider.
+        /// </summary>
+        /// <param name="disposing"></param>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (_serviceProvider is IDisposable d)
+                {
+                    d.Dispose();
+                    _serviceProvider = null;
+                }
+            }
+
+            base.Dispose(disposing);
         }
 
         #endregion
