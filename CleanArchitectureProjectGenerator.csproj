@@ -63,6 +63,11 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <None Update="Resources\ProjectCreatorToolWindowCommandMenuIcon.png">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
     <Page Update="Views\ProjectCreatorToolWindowControl.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
