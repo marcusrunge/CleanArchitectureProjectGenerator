@@ -1,13 +1,11 @@
-﻿using MarcusRunge.CleanArchitectureProjectGenerator.Views;
+﻿using MarcusRunge.CleanArchitectureProjectGenerator.ViewModels;
+using MarcusRunge.CleanArchitectureProjectGenerator.Views;
+using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using System;
 using System.ComponentModel.Design;
-using System.Globalization;
-using System.Threading;
 using System.Threading.Tasks;
-using Task = System.Threading.Tasks.Task;
-using MarcusRunge.CleanArchitectureProjectGenerator.ViewModels;
 
 namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
 {
@@ -24,7 +22,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
         /// <summary>
         /// Command menu group (command set GUID).
         /// </summary>
-        public static readonly Guid CommandSet = new Guid("5f8e3682-65e2-4b21-b209-1eecd93d7bbf");
+        public static readonly Guid CommandSet = new("5f8e3682-65e2-4b21-b209-1eecd93d7bbf");
 
         /// <summary>
         /// VS Package that provides this command, not null.
@@ -50,22 +48,12 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
         /// <summary>
         /// Gets the instance of the command.
         /// </summary>
-        public static ProjectCreatorToolWindowCommand Instance
-        {
-            get;
-            private set;
-        }
+        public static ProjectCreatorToolWindowCommand? Instance { get; private set; }
 
         /// <summary>
         /// Gets the service provider from the owner package.
         /// </summary>
-        private Microsoft.VisualStudio.Shell.IAsyncServiceProvider ServiceProvider
-        {
-            get
-            {
-                return this.package;
-            }
-        }
+        private IAsyncServiceProvider ServiceProvider => package;
 
         /// <summary>
         /// Initializes the singleton instance of the command.
@@ -77,8 +65,8 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
             // the UI thread.
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(package.DisposalToken);
 
-            OleMenuCommandService commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
-            Instance = new ProjectCreatorToolWindowCommand(package, commandService);
+            if (await package.GetServiceAsync(typeof(IMenuCommandService)) is OleMenuCommandService commandService)
+                Instance = new ProjectCreatorToolWindowCommand(package, commandService);
         }
 
         /// <summary>
@@ -110,7 +98,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
                 }
             });
 
-            Microsoft.VisualStudio.ErrorHandler.ThrowOnFailure(windowFrame.Show());
+            ErrorHandler.ThrowOnFailure(windowFrame.Show());
         }
     }
 }

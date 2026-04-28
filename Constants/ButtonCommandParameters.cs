@@ -1,8 +1,8 @@
 ﻿namespace MarcusRunge.CleanArchitectureProjectGenerator.Constants
 {
-    internal class ButtonCommandParameters
+    public class ButtonCommandParameters
     {
-        internal const string Cancel = "Cancel";
-        internal const string Create = "Create";
+        public const string Cancel = "Cancel";
+        public const string Create = "Create";
     }
 }
