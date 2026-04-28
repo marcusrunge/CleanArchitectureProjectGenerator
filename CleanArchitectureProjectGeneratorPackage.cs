@@ -3,7 +3,6 @@ using MarcusRunge.CleanArchitectureProjectGenerator.ViewModels;
 using MarcusRunge.CleanArchitectureProjectGenerator.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.Shell;
-using Prism.Ioc;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
