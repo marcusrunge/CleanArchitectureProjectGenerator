@@ -1,8 +1,7 @@
 ﻿using MarcusRunge.CleanArchitectureProjectGenerator.ViewModels;
 using MarcusRunge.CleanArchitectureProjectGenerator.Views;
-using Microsoft.VisualStudio;
+using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell;
-using Microsoft.VisualStudio.Shell.Interop;
 using System;
 using System.ComponentModel.Design;
 using System.Threading.Tasks;
@@ -74,31 +73,35 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
         /// </summary>
         /// <param name="sender">The event sender.</param>
         /// <param name="e">The event args.</param>
+
         private void Execute(object sender, EventArgs e)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            // Get the instance number 0 of this tool window. This window is single instance so this instance
-            // is actually the only one.
-            // The last flag is set to true so that if the tool window does not exists it will be created.
-            ToolWindowPane window = this.package.FindToolWindow(typeof(ProjectCreatorToolWindow), 0, true);
-            if ((null == window) || (null == window.Frame))
+            _ = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
             {
-                throw new NotSupportedException("Cannot create tool window");
-            }
+                var window = await package.ShowToolWindowAsync(typeof(ProjectCreatorToolWindow), 0, true, package.DisposalToken);
 
-            IVsWindowFrame windowFrame = (IVsWindowFrame)window.Frame;
-            // Resolve the view model registered in the package and set it as the DataContext for the control
-            ThreadHelper.JoinableTaskFactory.Run(async () =>
-            {
-                var vmObj = await this.package.GetServiceAsync(typeof(ProjectCreatorToolWindowViewModel));
-                if (vmObj is ProjectCreatorToolWindowViewModel vm && window.Content is ProjectCreatorToolWindowControl control)
-                {
+                if (window?.Frame == null)
+                    throw new NotSupportedException("Cannot create tool window");
+
+                var vm = await ResolveViewModelFromMefAsync();
+
+                if (window.Content is ProjectCreatorToolWindowControl control)
                     control.DataContext = vm;
-                }
             });
-
-            ErrorHandler.ThrowOnFailure(windowFrame.Show());
         }
+
+        private async Task<ProjectCreatorToolWindowViewModel> ResolveViewModelFromMefAsync()
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+            if (await package.GetServiceAsync(typeof(SComponentModel)) is not IComponentModel componentModel)
+                throw new InvalidOperationException("SComponentModel not available.");
+
+            var vm = componentModel.GetService<ProjectCreatorToolWindowViewModel>() ?? throw new InvalidOperationException("ViewModel not found. Is it exported via [Export] and included in VSIX?");
+            return vm;
+        }
+
     }
 }

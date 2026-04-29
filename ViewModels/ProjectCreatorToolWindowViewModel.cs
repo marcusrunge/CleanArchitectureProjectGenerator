@@ -1,12 +1,19 @@
 ﻿using MarcusRunge.CleanArchitectureProjectGenerator.Commands;
 using MarcusRunge.CleanArchitectureProjectGenerator.Constants;
+using Microsoft.VisualStudio.Composition;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.ComponentModel.Composition;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using CreationPolicy = System.ComponentModel.Composition.CreationPolicy;
+using ExportAttribute = System.ComponentModel.Composition.ExportAttribute;
 
 namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
 {
+
+    [Export(typeof(ProjectCreatorToolWindowViewModel))]
+    [PartCreationPolicy(CreationPolicy.NonShared)]
     internal class ProjectCreatorToolWindowViewModel : INotifyPropertyChanged
     {
         private ICommand? _buttonCommand;
