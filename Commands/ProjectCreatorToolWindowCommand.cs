@@ -1,9 +1,11 @@
-﻿using MarcusRunge.CleanArchitectureProjectGenerator.ViewModels;
+﻿using MarcusRunge.CleanArchitectureProjectGenerator.Contracts;
+using MarcusRunge.CleanArchitectureProjectGenerator.ViewModels;
 using MarcusRunge.CleanArchitectureProjectGenerator.Views;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell;
 using System;
 using System.ComponentModel.Design;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
@@ -76,11 +78,12 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
 
         private void Execute(object sender, EventArgs e)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
-
             _ = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
             {
-                var window = await package.ShowToolWindowAsync(typeof(ProjectCreatorToolWindow), 0, true, package.DisposalToken);
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(package.DisposalToken);
+
+                var window = await package.ShowToolWindowAsync(
+                    typeof(ProjectCreatorToolWindow), 0, true, package.DisposalToken);
 
                 if (window?.Frame == null)
                     throw new NotSupportedException("Cannot create tool window");
@@ -88,7 +91,61 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
                 var vm = await ResolveViewModelFromMefAsync();
 
                 if (window.Content is ProjectCreatorToolWindowControl control)
+                {
                     control.DataContext = vm;
+
+                    if (vm is IFrameworkElementLifecycleAware lifecycle)
+                    {
+                        var lifetimeCts = CancellationTokenSource.CreateLinkedTokenSource(package.DisposalToken);
+
+                        try
+                        {
+                            await lifecycle.OnLoadedAsync(lifetimeCts.Token);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            lifetimeCts.Dispose();
+                            return;
+                        }
+                        catch (Exception ex)
+                        {
+                            lifetimeCts.Dispose();
+                            // TODO: log ex
+                            throw;
+                        }
+
+                        void UnloadedHandler(object? s, EventArgs args)
+                        {
+                            control.Unloaded -= UnloadedHandler;
+                            lifetimeCts.Cancel();
+
+                            _ = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+                            {
+                                try
+                                {
+                                    // If OnUnloadedAsync touches UI, ensure UI thread:
+                                    // await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+                                    await lifecycle.OnUnloadedAsync(CancellationToken.None);
+                                }
+                                catch (OperationCanceledException)
+                                {
+                                    // ignore if you decide to make it cancellable
+                                }
+                                catch (Exception ex)
+                                {
+                                    // TODO: log ex (don’t silently swallow)
+                                }
+                                finally
+                                {
+                                    lifetimeCts.Dispose();
+                                }
+                            });
+                        }
+
+                        control.Unloaded += UnloadedHandler;
+                    }
+                }
             });
         }
 

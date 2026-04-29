@@ -1,6 +1,7 @@
 ﻿using MarcusRunge.CleanArchitectureProjectGenerator.Commands;
 using MarcusRunge.CleanArchitectureProjectGenerator.Common;
 using MarcusRunge.CleanArchitectureProjectGenerator.Constants;
+using MarcusRunge.CleanArchitectureProjectGenerator.Contracts;
 using MarcusRunge.CleanArchitectureProjectGenerator.Services;
 using Microsoft.VisualStudio.Composition;
 using System.ComponentModel.Composition;
@@ -15,19 +16,26 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
     [Export(typeof(ProjectCreatorToolWindowViewModel))]
     [PartCreationPolicy(CreationPolicy.NonShared)]
     [method: ImportingConstructor]
-    internal class ProjectCreatorToolWindowViewModel(IGeneratorService generatorService) : BindableBase
+    internal class ProjectCreatorToolWindowViewModel(IGeneratorService generatorService) : BindableBase, IFrameworkElementLifecycleAware
     {
-        private ICommand? _buttonCommand, _loadedCommand, _unloadedCommand;
-        private bool _isBusy;
+        private ICommand? _buttonCommand;       
         private string? _projectName;
 
         public ICommand ButtonCommand => _buttonCommand ??= new RelayCommand<string>(ExecuteButtonCommand);
-        public bool IsBusy { get => _isBusy; set => SetProperty(ref _isBusy, value); }
-        public ICommand LoadedCommand => _loadedCommand ??= new AsyncRelayCommand(ExecuteLoadedCommandAsync);
-
+       
         public string? ProjectName { get => _projectName; set => SetProperty(ref _projectName, value); }
 
-        public ICommand UnloadedCommand => _unloadedCommand ??= new RelayCommands(ExecuteUnloadedCommand);
+        
+        public async ValueTask OnLoadedAsync(CancellationToken cancellationToken = default)
+        {
+            await generatorService.InitializeAsync(ex => { }, cancellationToken);
+        }
+
+        public ValueTask OnUnloadedAsync(CancellationToken cancellationToken = default)
+        {
+            return new ValueTask();
+        }
+
 
         private void ExecuteButtonCommand(string? parameter)
         {
