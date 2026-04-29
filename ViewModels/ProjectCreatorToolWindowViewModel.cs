@@ -1,28 +1,33 @@
 ﻿using MarcusRunge.CleanArchitectureProjectGenerator.Commands;
+using MarcusRunge.CleanArchitectureProjectGenerator.Common;
 using MarcusRunge.CleanArchitectureProjectGenerator.Constants;
+using MarcusRunge.CleanArchitectureProjectGenerator.Services;
 using Microsoft.VisualStudio.Composition;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.ComponentModel.Composition;
-using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Input;
 using CreationPolicy = System.ComponentModel.Composition.CreationPolicy;
 using ExportAttribute = System.ComponentModel.Composition.ExportAttribute;
 
 namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
 {
-
     [Export(typeof(ProjectCreatorToolWindowViewModel))]
     [PartCreationPolicy(CreationPolicy.NonShared)]
-    internal class ProjectCreatorToolWindowViewModel : INotifyPropertyChanged
+    [method: ImportingConstructor]
+    internal class ProjectCreatorToolWindowViewModel(IGeneratorService generatorService) : BindableBase
     {
-        private ICommand? _buttonCommand;
+        private ICommand? _buttonCommand, _loadedCommand, _unloadedCommand;
         private bool _isBusy;
         private string? _projectName;
+
         public ICommand ButtonCommand => _buttonCommand ??= new RelayCommand<string>(ExecuteButtonCommand);
         public bool IsBusy { get => _isBusy; set => SetProperty(ref _isBusy, value); }
+        public ICommand LoadedCommand => _loadedCommand ??= new AsyncRelayCommand(ExecuteLoadedCommandAsync);
 
         public string? ProjectName { get => _projectName; set => SetProperty(ref _projectName, value); }
+
+        public ICommand UnloadedCommand => _unloadedCommand ??= new RelayCommands(ExecuteUnloadedCommand);
 
         private void ExecuteButtonCommand(string? parameter)
         {
@@ -38,21 +43,13 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
                 return;
         }
 
-        #region INotifyPropertyChanged Implementation
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        protected virtual void OnPropertyChanged([CallerMemberName] string? propertyName = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-
-        protected bool SetProperty<T>(ref T backingField, T value, [CallerMemberName] string? propertyName = null)
+        private async Task ExecuteLoadedCommandAsync()
         {
-            if (EqualityComparer<T>.Default.Equals(backingField, value))
-                return false;
-            backingField = value;
-            OnPropertyChanged(propertyName);
-            return true;
+            await generatorService.InitializeAsync(ex => { }, CancellationToken.None);
         }
 
-        #endregion INotifyPropertyChanged Implementation
+        private void ExecuteUnloadedCommand()
+        {
+        }
     }
 }
