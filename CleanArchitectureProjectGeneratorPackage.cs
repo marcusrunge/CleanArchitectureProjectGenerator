@@ -31,6 +31,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator
     [ProvideMenuResource("Menus.ctmenu", 1)]
     [ProvideToolWindow(typeof(ProjectCreatorToolWindow))]
     [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionExists_string, PackageAutoLoadFlags.BackgroundLoad)]
+    [ProvideBindingPath]
     public sealed class CleanArchitectureProjectGeneratorPackage : AsyncPackage
     {
         /// <summary>
