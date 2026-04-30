@@ -14,17 +14,18 @@
              Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}">
     <!--<i:Interaction.Triggers>
         <i:EventTrigger EventName="Loaded">
-            <i:InvokeCommandAction Command="{Binding LoadedCommand, Mode=OneWay}"/>
+            <i:InvokeCommandAction Command="{Binding LoadedCommand, Mode=OneWay}" />
         </i:EventTrigger>
         <i:EventTrigger EventName="Unloaded">
-            <i:InvokeCommandAction Command="{Binding UnloadedCommand, Mode=OneWay}"/>
+            <i:InvokeCommandAction Command="{Binding UnloadedCommand, Mode=OneWay}" />
         </i:EventTrigger>
     </i:Interaction.Triggers>-->
     <Grid Margin="12">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
         <!-- Form -->
@@ -35,14 +36,26 @@
 
             <TextBox Style="{DynamicResource {x:Static vsshell:VsResourceKeys.TextBoxStyleKey}}"
                      MinHeight="26"
-                     Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}" />
+                     Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
+                     VerticalContentAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1">
+            <TextBlock Margin="0,0,0,4"
+                       FontWeight="SemiBold"
+                       Text="{x:Static properties:Resources.BaseNamespace}" />
+
+            <TextBox Style="{DynamicResource {x:Static vsshell:VsResourceKeys.TextBoxStyleKey}}"
+                     MinHeight="26"
+                     Text="{Binding BaseNamespace, UpdateSourceTrigger=PropertyChanged}"
+                     VerticalContentAlignment="Center" />
         </StackPanel>
 
         <!-- Command row -->
         <StackPanel Grid.Row="2" Margin="0,12,0,0">
             <Border Height="1"
                     Margin="0,0,0,8"
-                    Background="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMenuSeparatorKey}}"/>
+                    Background="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMenuSeparatorKey}}" />
 
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ButtonStyleKey}}"

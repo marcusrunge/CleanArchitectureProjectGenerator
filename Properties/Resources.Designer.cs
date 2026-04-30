@@ -61,6 +61,15 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Properties {
         }
         
         /// <summary>
+        ///   Sucht eine lokalisierte Zeichenfolge, die Base Namespace ähnelt.
+        /// </summary>
+        public static string BaseNamespace {
+            get {
+                return ResourceManager.GetString("BaseNamespace", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Sucht eine lokalisierte Zeichenfolge, die Cancel ähnelt.
         /// </summary>
         public static string Cancel {

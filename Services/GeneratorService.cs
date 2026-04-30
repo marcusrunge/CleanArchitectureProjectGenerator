@@ -1,6 +1,10 @@
 ﻿using MarcusRunge.CleanArchitectureProjectGenerator.Common;
+using Microsoft.VisualStudio;
+using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 using System;
 using System.ComponentModel.Composition;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -8,7 +12,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
 {
     internal interface IGeneratorService
     {
-        string? NameSpace { get; set; }
+        string? Namespace { get; set; }
 
         Task CreateAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken);
 
@@ -17,20 +21,91 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
 
     [Export(typeof(IGeneratorService))]
     [PartCreationPolicy(CreationPolicy.NonShared)]
-    internal class GeneratorService : BindableBase, IGeneratorService
+    [method: ImportingConstructor]
+    internal class GeneratorService([Import(typeof(SVsServiceProvider))] IServiceProvider serviceProvider) : BindableBase, IGeneratorService
     {
-        private string? _nameSpace;
+        private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
 
-        public string? NameSpace { get => _nameSpace; set => SetProperty(ref _nameSpace, value); }
+        private string? _namespace;
+
+        public string? Namespace { get => _namespace; set => SetProperty(ref _namespace, value); }
 
         public Task CreateAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken)
+            => Task.CompletedTask;
+
+        public async Task InitializeAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken)
         {
-            return Task.CompletedTask;
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+                if (_serviceProvider.GetService(typeof(SVsShellMonitorSelection)) is not IVsMonitorSelection monitorSelection)
+                {
+                    Namespace = null;
+                    return;
+                }
+                var hierarchy = TryGetHierarchyFromCurrentSelection(monitorSelection);
+                hierarchy ??= TryGetStartupProjectHierarchy(monitorSelection);
+                Namespace = hierarchy != null ? GetRootProjectName(hierarchy) : null;
+            }
+            catch (Exception ex)
+            {
+                Namespace = null;
+                exceptionCallback?.Invoke(ex);
+            }
         }
 
-        public Task InitializeAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken)
+        private static string? GetRootProjectName(IVsHierarchy hierarchy)
         {
-            return Task.CompletedTask;
+            ThreadHelper.ThrowIfNotOnUIThread();
+            if (ErrorHandler.Succeeded(hierarchy.GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_Caption, out var captionObj))
+                && captionObj is string caption
+                && !string.IsNullOrWhiteSpace(caption))
+            {
+                return caption;
+            }
+            if (ErrorHandler.Succeeded(hierarchy.GetProperty(VSConstants.VSITEMID_ROOT, (int)__VSHPROPID.VSHPROPID_Name, out var nameObj))
+                && nameObj is string name
+                && !string.IsNullOrWhiteSpace(name))
+            {
+                return name;
+            }
+            return null;
+        }
+
+        private static IVsHierarchy? TryGetHierarchyFromCurrentSelection(IVsMonitorSelection monitorSelection)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            IntPtr hierPtr = IntPtr.Zero;
+            IntPtr selContainerPtr = IntPtr.Zero;
+
+            try
+            {
+                int hr = monitorSelection.GetCurrentSelection(out hierPtr, out uint itemid, out IVsMultiItemSelect? multiSelect, out selContainerPtr);
+                if (!ErrorHandler.Succeeded(hr) || hierPtr == IntPtr.Zero)
+                    return null;
+
+                return Marshal.GetObjectForIUnknown(hierPtr) as IVsHierarchy;
+            }
+            finally
+            {
+                if (hierPtr != IntPtr.Zero) Marshal.Release(hierPtr);
+                if (selContainerPtr != IntPtr.Zero) Marshal.Release(selContainerPtr);
+            }
+        }
+
+        private static IVsHierarchy? TryGetStartupProjectHierarchy(IVsMonitorSelection monitorSelection)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            int hr = monitorSelection.GetCurrentElementValue((uint)VSConstants.VSSELELEMID.SEID_StartupProject, out object value);
+            if (!ErrorHandler.Succeeded(hr) || value is null)
+                return null;
+            if (value is IVsHierarchy hier)
+                return hier;
+            if (value is IntPtr ptr && ptr != IntPtr.Zero)
+                return Marshal.GetObjectForIUnknown(ptr) as IVsHierarchy;
+            return null;
         }
     }
 }
