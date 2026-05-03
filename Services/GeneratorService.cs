@@ -3,7 +3,10 @@ using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.Composition;
+using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,6 +18,8 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         string? Namespace { get; set; }
 
         Task CreateAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken);
+
+        Task<IReadOnlyList<string>> GetDotNetVersionsAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken);
 
         Task InitializeAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken);
     }
@@ -32,6 +37,19 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
 
         public Task CreateAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken)
             => Task.CompletedTask;
+
+        public async Task<IReadOnlyList<string>> GetDotNetVersionsAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken) => await Task.Run(() =>
+        {
+            var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            AddDotNetSdkTargets(results);
+            AddNetFrameworkTargets(results);
+
+            return results
+                .OrderBy(t => t)
+                .ToList()
+                .AsReadOnly();
+        });
 
         public async Task InitializeAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken)
         {
@@ -52,6 +70,54 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             {
                 Namespace = null;
                 exceptionCallback?.Invoke(ex);
+            }
+        }
+
+        private static void AddDotNetSdkTargets(HashSet<string> targets)
+        {
+            var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+            var sdkRoot = Path.Combine(programFiles, "dotnet", "sdk");
+
+            if (!Directory.Exists(sdkRoot))
+                return;
+
+            foreach (var dir in Directory.GetDirectories(sdkRoot))
+            {
+                var name = Path.GetFileName(dir);
+
+                if (!Version.TryParse(name.Split('-')[0], out var version))
+                    continue;
+
+                if (version.Major >= 5)
+                {
+                    targets.Add($"net{version.Major}.0");
+                }
+            }
+        }
+
+        private static void AddNetFrameworkTargets(HashSet<string> targets)
+        {
+            var referenceRoot =
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
+                    "Reference Assemblies",
+                    "Microsoft",
+                    "Framework",
+                    ".NETFramework"
+                );
+
+            if (!Directory.Exists(referenceRoot))
+                return;
+
+            foreach (var dir in Directory.GetDirectories(referenceRoot))
+            {
+                var name = Path.GetFileName(dir);
+
+                if (name.StartsWith("v"))
+                {
+                    var version = name.TrimStart('v').Replace(".", "");
+                    targets.Add($"net{version}");
+                }
             }
         }
 

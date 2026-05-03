@@ -24,6 +24,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -51,8 +52,20 @@
                      VerticalContentAlignment="Center" />
         </StackPanel>
 
+        <StackPanel Grid.Row="2">
+            <TextBlock Margin="0,0,0,4"
+               FontWeight="SemiBold"
+               Text="{x:Static properties:Resources.DotNetVersion}" />
+
+            <ComboBox Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ComboBoxStyleKey}}"
+                      MinHeight="26"
+                      ItemsSource="{Binding DotNetVersions}"
+                      SelectedItem="{Binding SelectedDotNetVersion, UpdateSourceTrigger=PropertyChanged}"
+                      VerticalContentAlignment="Center" />
+        </StackPanel>
+
         <!-- Command row -->
-        <StackPanel Grid.Row="2" Margin="0,12,0,0">
+        <StackPanel Grid.Row="3" Margin="0,12,0,0">
             <Border Height="1"
                     Margin="0,0,0,8"
                     Background="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMenuSeparatorKey}}" />

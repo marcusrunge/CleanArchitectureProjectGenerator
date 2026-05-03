@@ -126,6 +126,9 @@
   <data name="Create" xml:space="preserve">
     <value>Create</value>
   </data>
+  <data name="DotNetVersion" xml:space="preserve">
+    <value>.NET Version</value>
+  </data>
   <data name="ProjectName" xml:space="preserve">
     <value>Project Name</value>
   </data>

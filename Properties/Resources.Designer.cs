@@ -88,6 +88,15 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Properties {
         }
         
         /// <summary>
+        ///   Sucht eine lokalisierte Zeichenfolge, die .NET Version ähnelt.
+        /// </summary>
+        public static string DotNetVersion {
+            get {
+                return ResourceManager.GetString("DotNetVersion", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Sucht eine lokalisierte Zeichenfolge, die Project Name ähnelt.
         /// </summary>
         public static string ProjectName {
