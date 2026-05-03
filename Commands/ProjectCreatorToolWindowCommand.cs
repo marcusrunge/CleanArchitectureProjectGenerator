@@ -1,8 +1,10 @@
 ﻿using MarcusRunge.CleanArchitectureProjectGenerator.Contracts;
+using MarcusRunge.CleanArchitectureProjectGenerator.Helpers;
 using MarcusRunge.CleanArchitectureProjectGenerator.ViewModels;
 using MarcusRunge.CleanArchitectureProjectGenerator.Views;
 using Microsoft.VisualStudio.ComponentModelHost;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 using System;
 using System.ComponentModel.Design;
 using System.Threading;
@@ -90,8 +92,10 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
 
                 var vm = await ResolveViewModelFromMefAsync();
 
-                if (window.Content is ProjectCreatorToolWindowControl control)
+                if (window.Content is ProjectCreatorToolWindowControl control && window.Frame is IVsWindowFrame vsWindowFrame)
                 {
+                    ToolWindowCloser.SetFrame(control, vsWindowFrame);
+
                     control.DataContext = vm;
 
                     if (vm is IFrameworkElementLifecycleAware lifecycle)

@@ -9,7 +9,6 @@ using System.ComponentModel.Composition;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
-using System.Xml.Linq;
 using CreationPolicy = System.ComponentModel.Composition.CreationPolicy;
 using ExportAttribute = System.ComponentModel.Composition.ExportAttribute;
 
@@ -22,12 +21,15 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
     {
         private ICommand? _buttonCommand;
         private ObservableCollection<string> _dotNetVersions = [];
+        private bool _isOnCloseRequested;
         private string? _projectName, _baseNamespace;
 
         private string? _selectedDotNetVersion;
         public string? BaseNamespace { get => _baseNamespace; set => SetProperty(ref _baseNamespace, value); }
         public ICommand ButtonCommand => _buttonCommand ??= new RelayCommand<string>(ExecuteButtonCommand);
         public ObservableCollection<string> DotNetVersions { get => _dotNetVersions; set => SetProperty(ref _dotNetVersions, value); }
+
+        public bool IsOnCloseRequested { get => _isOnCloseRequested; set => SetProperty(ref _isOnCloseRequested, value); }
 
         public string? ProjectName
         {
@@ -63,6 +65,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
                 return;
             else if (parameter == ButtonCommandParameters.Cancel)
             {
+                IsOnCloseRequested = true;
             }
             else if (parameter == ButtonCommandParameters.Create)
             {

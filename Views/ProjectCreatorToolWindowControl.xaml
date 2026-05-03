@@ -8,10 +8,12 @@
              xmlns:constants="clr-namespace:MarcusRunge.CleanArchitectureProjectGenerator.Constants"
              xmlns:vsshell="clr-namespace:Microsoft.VisualStudio.Shell;assembly=Microsoft.VisualStudio.Shell.15.0"
              xmlns:i="http://schemas.microsoft.com/xaml/behaviors"
+             xmlns:helpers="clr-namespace:MarcusRunge.CleanArchitectureProjectGenerator.Helpers"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=viewmodels:ProjectCreatorToolWindowViewModel}"
              Background="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowBackgroundKey}}"
-             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}">
+             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+             helpers:ToolWindowCloser.CloseRequested="{Binding IsOnCloseRequested}">
     <!--<i:Interaction.Triggers>
         <i:EventTrigger EventName="Loaded">
             <i:InvokeCommandAction Command="{Binding LoadedCommand, Mode=OneWay}" />
