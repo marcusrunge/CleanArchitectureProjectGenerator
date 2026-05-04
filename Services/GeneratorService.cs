@@ -33,16 +33,19 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         /// <remarks>
         /// This is commonly bound to UI (ViewModel) input so it can be displayed/edited.
         /// </remarks>
-        string? Namespace { get; set; }
+        string? RootNamespace { get; set; }
 
         /// <summary>
         /// Creates/generates the project artifacts.
         /// </summary>
+        /// <param name="projectName">The name of the project to create, typically entered by the user.</param>
+        /// <param name="baseNamespace">The base namespace to use for the generated code, often derived from <see cref="RootNamespace"/> and <paramref name="projectName"/>.</param>
+        /// <param name="dotNetVersion">The target framework moniker (TFM) selected by the user (e.g., <c>net8.0</c>, <c>net48</c>).</param>
         /// <param name="exceptionCallback">
         /// A callback invoked when an exception occurs. This allows UI layers to display errors without crashing.
         /// </param>
         /// <param name="cancellationToken">A token used to cancel the operation.</param>
-        Task CreateAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken);
+        Task CreateAsync(string projectName, string baseNamespace, string dotNetVersion, Action<Exception> exceptionCallback, CancellationToken cancellationToken);
 
         /// <summary>
         /// Returns a list of available target framework monikers (TFMs) based on the machine's installed .NET SDKs
@@ -71,7 +74,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
     /// <remarks>
     /// <para>
     /// Exported as non-shared so each consumer gets a fresh instance (useful when stateful properties like
-    /// <see cref="Namespace"/> are bound to UI).
+    /// <see cref="RootNamespace"/> are bound to UI).
     /// </para>
     /// <para>
     /// Inherits from <see cref="BindableBase"/> to support UI binding through <see cref="System.ComponentModel.INotifyPropertyChanged"/>.
@@ -92,35 +95,101 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         private string? _namespace;
 
         /// <inheritdoc/>
-        public string? Namespace
+        public string? RootNamespace
         {
             get => _namespace;
             set => SetProperty(ref _namespace, value);
         }
 
         /// <inheritdoc/>
-        public Task CreateAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken)
-            => Task.CompletedTask;
+        public async Task CreateAsync(string projectName, string baseNamespace, string dotNetVersion, Action<Exception> exceptionCallback, CancellationToken cancellationToken)
+        {
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (string.IsNullOrWhiteSpace(projectName))
+                    throw new ArgumentException("Project name must not be empty.", nameof(projectName));
+
+                if (string.IsNullOrWhiteSpace(baseNamespace))
+                    throw new ArgumentException("Base namespace must not be empty.", nameof(baseNamespace));
+
+                if (string.IsNullOrWhiteSpace(dotNetVersion))
+                    throw new ArgumentException("Target framework (dotNetVersion) must not be empty.", nameof(dotNetVersion));
+
+                // Get solution directory (must exist and be open)
+                var solutionDir = await GetSolutionDirectoryAsync(cancellationToken).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(solutionDir) || !Directory.Exists(solutionDir))
+                    throw new InvalidOperationException("No solution is open or the solution directory could not be resolved.");
+
+                // Create project folder under solution directory
+                var projectDir = Path.Combine(solutionDir, projectName);
+                Directory.CreateDirectory(projectDir);
+
+                // Create project with dotnet new
+                await RunDotNetNewAsync(
+                    templateShortName: "classlib",
+                    projectName: projectName,
+                    outputDir: projectDir,
+                    targetFramework: dotNetVersion,
+                    cancellationToken: cancellationToken).ConfigureAwait(false);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Find generated csproj
+                var csprojPath = Directory.GetFiles(projectDir, "*.csproj", SearchOption.TopDirectoryOnly)
+                                          .FirstOrDefault() ?? throw new FileNotFoundException("Project file (*.csproj) was not created by dotnet new.", projectDir);
+
+                // Ensure RootNamespace matches the requested baseNamespace
+                EnsureRootNamespaceInCsproj(csprojPath, baseNamespace);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                // Add project to solution (must be on UI thread)
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+                var dte = _serviceProvider?.GetService(typeof(SDTE)) as EnvDTE80.DTE2;
+                if (dte?.Solution is null)
+                    throw new InvalidOperationException("DTE/Solution service is not available.");
+
+                // This adds an existing project file to the solution
+                dte.Solution.AddFromFile(csprojPath);
+
+                // Optional: update bindable property so UI can reflect new namespace if desired
+                RootNamespace = baseNamespace;
+            }
+            catch (OperationCanceledException)
+            {
+                // Don't treat cancellation as an error.
+                throw;
+            }
+            catch (Exception ex)
+            {
+                exceptionCallback?.Invoke(ex);
+                // Depending on your UI flow you can either swallow or rethrow.
+                // Swallowing keeps UI responsive; rethrowing lets caller handle.
+                // Here we swallow to match the "callback-driven" pattern.
+            }
+        }
 
         /// <inheritdoc/>
-        public async Task<IReadOnlyList<string>> GetDotNetVersionsAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken)
-            => await Task.Run(() =>
-            {
-                // Collect targets in a set to avoid duplicates (case-insensitive).
-                var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        public async Task<IReadOnlyList<string>> GetDotNetVersionsAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken) => await Task.Run(() =>
+        {
+            // Collect targets in a set to avoid duplicates (case-insensitive).
+            var results = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                // Add TFMs from installed .NET SDK folders (net5.0+).
-                AddDotNetSdkTargets(results);
+            // Add TFMs from installed .NET SDK folders (net5.0+).
+            AddDotNetSdkTargets(results);
 
-                // Add TFMs from .NET Framework reference assemblies (e.g., net48).
-                AddNetFrameworkTargets(results);
+            // Add TFMs from .NET Framework reference assemblies (e.g., net48).
+            AddNetFrameworkTargets(results);
 
-                // Return a stable, sorted, read-only list for UI binding and deterministic behavior.
-                return results
-                    .OrderBy(t => t)
-                    .ToList()
-                    .AsReadOnly();
-            });
+            // Return a stable, sorted, read-only list for UI binding and deterministic behavior.
+            return results
+                .OrderBy(t => t)
+                .ToList()
+                .AsReadOnly();
+        });
 
         /// <inheritdoc/>
         public async Task InitializeAsync(Action<Exception> exceptionCallback, CancellationToken cancellationToken)
@@ -137,7 +206,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 if (_serviceProvider.GetService(typeof(SVsShellMonitorSelection)) is not IVsMonitorSelection monitorSelection)
                 {
                     // If the service isn't available, clear state and exit gracefully.
-                    Namespace = null;
+                    RootNamespace = null;
                     return;
                 }
 
@@ -148,12 +217,12 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 hierarchy ??= TryGetStartupProjectHierarchy(monitorSelection);
 
                 // Convert the hierarchy root into a user-friendly project caption/name.
-                Namespace = hierarchy != null ? GetRootProjectName(hierarchy) : null;
+                RootNamespace = hierarchy != null ? GetRootProjectName(hierarchy) : null;
             }
             catch (Exception ex)
             {
                 // On any failure, reset state so the UI doesn't display stale values.
-                Namespace = null;
+                RootNamespace = null;
 
                 // Report error via callback so the caller/UI can decide how to present it.
                 exceptionCallback?.Invoke(ex);
@@ -227,6 +296,38 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             }
         }
 
+        private static void EnsureRootNamespaceInCsproj(string csprojPath, string rootNamespace)
+        {
+            // Edits csproj XML to ensure <RootNamespace> is set
+            var doc = System.Xml.Linq.XDocument.Load(csprojPath);
+
+            var project = doc.Root;
+            if (project is null)
+                throw new InvalidOperationException("Invalid csproj XML (missing root element).");
+
+            // SDK-style csproj typically has no XML namespace; but handle both.
+            var ns = project.Name.Namespace;
+
+            // Find or create a PropertyGroup
+            var propertyGroup = project.Elements(ns + "PropertyGroup").FirstOrDefault()
+                                ?? new System.Xml.Linq.XElement(ns + "PropertyGroup");
+
+            if (propertyGroup.Parent is null)
+                project.AddFirst(propertyGroup);
+
+            var rootNsElement = propertyGroup.Element(ns + "RootNamespace");
+            if (rootNsElement is null)
+            {
+                propertyGroup.Add(new System.Xml.Linq.XElement(ns + "RootNamespace", rootNamespace));
+            }
+            else
+            {
+                rootNsElement.Value = rootNamespace;
+            }
+
+            doc.Save(csprojPath);
+        }
+
         /// <summary>
         /// Gets a displayable name for the root of a Visual Studio hierarchy (typically the project name).
         /// </summary>
@@ -269,6 +370,68 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             }
 
             return null;
+        }
+
+        private static async Task RunDotNetNewAsync(
+            string templateShortName,
+            string projectName,
+            string outputDir,
+            string targetFramework,
+            CancellationToken cancellationToken)
+        {
+            // dotnet new classlib -n <name> -o <dir> -f <tfm> --no-restore
+            var args =
+                $"new {templateShortName} -n \"{projectName}\" -o \"{outputDir}\" -f \"{targetFramework}\" --no-restore";
+
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "dotnet",
+                Arguments = args,
+                WorkingDirectory = outputDir,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            using var process = new System.Diagnostics.Process { StartInfo = psi, EnableRaisingEvents = true };
+
+            var stdOut = new System.Text.StringBuilder();
+            var stdErr = new System.Text.StringBuilder();
+
+            var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            process.OutputDataReceived += (_, e) => { if (e.Data != null) stdOut.AppendLine(e.Data); };
+            process.ErrorDataReceived += (_, e) => { if (e.Data != null) stdErr.AppendLine(e.Data); };
+            process.Exited += (_, __) => tcs.TrySetResult(process.ExitCode);
+
+            if (!process.Start())
+                throw new InvalidOperationException("Failed to start 'dotnet' process.");
+
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            using (cancellationToken.Register(() =>
+            {
+                try
+                {
+                    if (!process.HasExited)
+                        process.Kill();
+                }
+                catch
+                {
+                    // Ignore kill failures
+                }
+            }))
+            {
+                var exitCode = await tcs.Task.ConfigureAwait(false);
+
+                if (exitCode != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"dotnet new failed with exit code {exitCode}.\n\nSTDOUT:\n{stdOut}\n\nSTDERR:\n{stdErr}");
+                }
+            }
         }
 
         /// <summary>
@@ -350,6 +513,20 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 return Marshal.GetObjectForIUnknown(ptr) as IVsHierarchy;
 
             return null;
+        }
+
+        private async Task<string?> GetSolutionDirectoryAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+
+            if (_serviceProvider.GetService(typeof(SVsSolution)) is not IVsSolution solution)
+                return null;
+
+            // If no solution is open, GetSolutionInfo often returns empty strings.
+            ErrorHandler.ThrowOnFailure(solution.GetSolutionInfo(out var solutionDir, out _, out _));
+            return solutionDir;
         }
     }
 }

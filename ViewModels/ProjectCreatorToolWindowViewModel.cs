@@ -28,8 +28,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
     [Export(typeof(ProjectCreatorToolWindowViewModel))]
     [PartCreationPolicy(CreationPolicy.NonShared)]
     [method: ImportingConstructor]
-    internal class ProjectCreatorToolWindowViewModel(IGeneratorService generatorService)
-        : BindableBase, IFrameworkElementLifecycleAware
+    internal class ProjectCreatorToolWindowViewModel(IGeneratorService generatorService) : BindableBase, IFrameworkElementLifecycleAware
     {
         // Backing field for lazy command initialization (avoid allocating command until first access).
         private ICommand? _buttonCommand;
@@ -38,21 +37,15 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
         private ObservableCollection<string> _dotNetVersions = [];
 
         // Bound flag used by the view (via attached property) to request closing the tool window.
-        private bool _isOnCloseRequested;
+        private bool _isOnCloseRequested, _isRootNamespaceSelected;
 
         // Backing fields for bindable properties used by the UI.
-        private string? _projectName, _baseNamespace;
-
-        private string? _selectedDotNetVersion;
+        private string? _projectName, _baseNamespace, _rootNamespace, _selectedDotNetVersion;
 
         /// <summary>
         /// Gets or sets the base namespace used for generated code (e.g., "Company.Product.Module").
         /// </summary>
-        public string? BaseNamespace
-        {
-            get => _baseNamespace;
-            set => SetProperty(ref _baseNamespace, value);
-        }
+        public string? BaseNamespace { get => _baseNamespace; set => SetProperty(ref _baseNamespace, value); }
 
         /// <summary>
         /// Gets the command invoked by the UI buttons (Cancel/Create), using a string command parameter.
@@ -61,8 +54,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
         /// The command parameter is expected to match values from <see cref="ButtonCommandParameters"/>.
         /// Lazy initialization ensures the command is created only when needed.
         /// </remarks>
-        public ICommand ButtonCommand =>
-            _buttonCommand ??= new RelayCommand<string>(ExecuteButtonCommand);
+        public ICommand ButtonCommand => _buttonCommand ??= new AsyncRelayCommand<string>(ExecuteButtonCommandAsync);
 
         /// <summary>
         /// Gets or sets the list of available target frameworks (TFMs) displayed in the UI.
@@ -70,11 +62,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
         /// <remarks>
         /// <see cref="ObservableCollection{T}"/> is used so adding items triggers UI updates automatically.
         /// </remarks>
-        public ObservableCollection<string> DotNetVersions
-        {
-            get => _dotNetVersions;
-            set => SetProperty(ref _dotNetVersions, value);
-        }
+        public ObservableCollection<string> DotNetVersions { get => _dotNetVersions; set => SetProperty(ref _dotNetVersions, value); }
 
         /// <summary>
         /// Gets or sets a flag indicating that the tool window should be closed.
@@ -83,11 +71,9 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
         /// This is typically bound to an attached property (e.g., <c>ToolWindowCloser.CloseRequested</c>)
         /// so the ViewModel can request closing without referencing VS shell APIs.
         /// </remarks>
-        public bool IsOnCloseRequested
-        {
-            get => _isOnCloseRequested;
-            set => SetProperty(ref _isOnCloseRequested, value);
-        }
+        public bool IsOnCloseRequested { get => _isOnCloseRequested; set => SetProperty(ref _isOnCloseRequested, value); }
+
+        public bool IsRootNamespaceSelected { get => _isRootNamespaceSelected; set => SetProperty(ref _isRootNamespaceSelected, value); }
 
         /// <summary>
         /// Gets or sets the project name entered by the user.
@@ -108,18 +94,16 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
                 // Note: This will produce strings like "RootNamespace.ProjectName".
                 // If generatorService.Namespace is null, this becomes " .{value}" (string interpolation yields " .x"?),
                 // but we keep logic unchanged as requested.
-                BaseNamespace = $"{generatorService.Namespace}.{value}";
+                BaseNamespace = $"{generatorService.RootNamespace}.{value}";
             }
         }
+
+        public string? RootNamespace { get => _rootNamespace; set => SetProperty(ref _rootNamespace, value); }
 
         /// <summary>
         /// Gets or sets the currently selected target framework (TFM) in the UI.
         /// </summary>
-        public string? SelectedDotNetVersion
-        {
-            get => _selectedDotNetVersion;
-            set => SetProperty(ref _selectedDotNetVersion, value);
-        }
+        public string? SelectedDotNetVersion { get => _selectedDotNetVersion; set => SetProperty(ref _selectedDotNetVersion, value); }
 
         /// <summary>
         /// Lifecycle callback invoked when the view/control is loaded.
@@ -138,7 +122,8 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
             await generatorService.InitializeAsync(ex => { }, cancellationToken);
 
             // Use the inferred namespace as the initial base namespace shown to the user.
-            BaseNamespace = generatorService.Namespace;
+            BaseNamespace = generatorService.RootNamespace;
+            RootNamespace = generatorService.RootNamespace;
 
             // Query available TFMs (e.g., net8.0, net48) for a dropdown/list in the UI.
             var dotNetVersions = await generatorService.GetDotNetVersionsAsync(ex => { }, cancellationToken);
@@ -177,7 +162,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
         /// <remarks>
         /// This pattern allows multiple buttons to share one command while differentiating actions via CommandParameter.
         /// </remarks>
-        private void ExecuteButtonCommand(string? parameter)
+        private async Task ExecuteButtonCommandAsync(string? parameter)
         {
             // Ignore missing parameters to keep command robust against misconfigured bindings.
             if (string.IsNullOrEmpty(parameter))
@@ -189,11 +174,10 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
                 // Trigger close via bound flag (typically handled by an attached behavior in the view).
                 IsOnCloseRequested = true;
             }
-            else if (parameter == ButtonCommandParameters.Create)
+            else if (parameter == ButtonCommandParameters.Create && !string.IsNullOrWhiteSpace(ProjectName) && !string.IsNullOrWhiteSpace(BaseNamespace) && !string.IsNullOrWhiteSpace(SelectedDotNetVersion) && !string.IsNullOrWhiteSpace(RootNamespace))
             {
-                // Placeholder for creation logic.
-                // Typical next steps might include validating inputs, calling generatorService.CreateAsync,
-                // and then requesting close if successful.
+                await generatorService.CreateAsync(IsRootNamespaceSelected ? $"{RootNamespace!}.{ProjectName!}" : ProjectName!, BaseNamespace!, SelectedDotNetVersion!, ex => { }, CancellationToken.None);
+                IsOnCloseRequested = true;
             }
             else
             {

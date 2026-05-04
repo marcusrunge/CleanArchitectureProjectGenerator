@@ -37,10 +37,23 @@
                        FontWeight="SemiBold"
                        Text="{x:Static properties:Resources.ProjectName}" />
 
-            <TextBox Style="{DynamicResource {x:Static vsshell:VsResourceKeys.TextBoxStyleKey}}"
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition />
+                </Grid.ColumnDefinitions>
+                <CheckBox Grid.Column="0"
+                          Margin="0,0,8,0"
+                          VerticalAlignment="Center"
+                          Content="{Binding RootNamespace}"
+                          ContentStringFormat="{}{0}."
+                          Style="{DynamicResource {x:Static vsshell:VsResourceKeys.CheckBoxStyleKey}}"
+                          IsChecked="{Binding IsRootNamespaceSelected, UpdateSourceTrigger=PropertyChanged}" />
+                <TextBox  Grid.Column="1" Style="{DynamicResource {x:Static vsshell:VsResourceKeys.TextBoxStyleKey}}"
                      MinHeight="26"
                      Text="{Binding ProjectName, UpdateSourceTrigger=PropertyChanged}"
                      VerticalContentAlignment="Center" />
+            </Grid>
         </StackPanel>
 
         <StackPanel Grid.Row="1">
