@@ -59,6 +59,9 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <None Update="Resources\CleanArchitectureModule.zip">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="Resources\ProjectCreatorToolWindowCommandMenuIcon.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
