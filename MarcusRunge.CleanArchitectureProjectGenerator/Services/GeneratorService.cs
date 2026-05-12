@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -134,9 +135,64 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
 
                 var solution2 = (EnvDTE80.Solution2)dte.Solution;
 
-                var templatePath = solution2.GetProjectTemplate("CleanArchitectureModule.zip", "CSharp");
+                //var templatePath = solution2.GetProjectTemplate("CleanArchitectureModule.zip", "CSharp");
 
-                solution2.AddFromTemplate(templatePath, projectDir, fullProjectName, Exclusive: false);
+                //solution2.AddFromTemplate(templatePath, projectDir, fullProjectName, Exclusive: false);
+
+                var extensionDir = Path.GetDirectoryName(typeof(GeneratorService).Assembly.Location)
+                    ?? throw new InvalidOperationException("Extension directory could not be resolved.");
+
+                var templateZipPath = Path.Combine(
+    extensionDir,
+    "Resources",
+    "CleanArchitectureModule.zip");
+
+                if (!File.Exists(templateZipPath))
+                {
+                    throw new FileNotFoundException(
+                        $"Template zip was not found at expected path: {templateZipPath}",
+                        templateZipPath);
+                }
+
+                var tempTemplateDir = Path.Combine(
+                    Path.GetTempPath(),
+                    "MarcusRunge.CleanArchitectureProjectGenerator",
+                    Guid.NewGuid().ToString("N"));
+
+                Directory.CreateDirectory(tempTemplateDir);
+
+                ZipFile.ExtractToDirectory(templateZipPath, tempTemplateDir);
+
+                var vstemplatePath = Directory
+                    .GetFiles(tempTemplateDir, "*.vstemplate", SearchOption.AllDirectories)
+                    .FirstOrDefault();
+
+                if (string.IsNullOrWhiteSpace(vstemplatePath) || !File.Exists(vstemplatePath))
+                {
+                    throw new FileNotFoundException(
+                        $"No .vstemplate file was found inside template zip: {templateZipPath}",
+                        templateZipPath);
+                }
+
+                var templateRoot = Path.GetDirectoryName(vstemplatePath)
+                    ?? throw new InvalidOperationException("Template root could not be resolved.");
+
+                var templateCsprojPath = Path.Combine(templateRoot, "CleanArchitectureModule.csproj");
+
+                if (!File.Exists(templateCsprojPath))
+                {
+                    throw new FileNotFoundException(
+                        $"CleanArchitectureModule.csproj was not found next to the .vstemplate. Expected: {templateCsprojPath}",
+                        templateCsprojPath);
+                }
+
+                System.Diagnostics.Debug.WriteLine($"Template zip: {templateZipPath}");
+                System.Diagnostics.Debug.WriteLine($"Temp template dir: {tempTemplateDir}");
+                System.Diagnostics.Debug.WriteLine($"VSTemplate path: {vstemplatePath}");
+                System.Diagnostics.Debug.WriteLine($"Template csproj: {templateCsprojPath}");
+
+                solution2.AddFromTemplate(vstemplatePath, projectDir, fullProjectName, Exclusive: false);
+
 
                 cancellationToken.ThrowIfCancellationRequested();
 

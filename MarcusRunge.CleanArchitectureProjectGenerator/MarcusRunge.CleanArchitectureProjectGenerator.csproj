@@ -70,5 +70,11 @@
     <Page Update="Views\ProjectCreatorToolWindowControl.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Page>
-  </ItemGroup>  
+  </ItemGroup>
+	<ItemGroup>
+		<Content Include="Resources\CleanArchitectureModule.zip">
+			<IncludeInVSIX>true</IncludeInVSIX>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+	</ItemGroup>
 </Project>
