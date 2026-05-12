@@ -38,14 +38,14 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         /// <summary>
         /// Creates/generates the project artifacts.
         /// </summary>
-        /// <param name="assemblyName">The name of the assembly to create, typically entered by the user.</param>
+        /// <param name="safeProjectname">The name of the assembly to create, typically entered by the user.</param>
         /// <param name="rootNamespace">The base root namespace to use for the generated code, often derived from <see cref="RootNamespace"/> and <paramref name="projectName"/>.</param>
         /// <param name="targetFramework">The target framework moniker (TFM) selected by the user (e.g., <c>net8.0</c>, <c>net48</c>).</param>
         /// <param name="exceptionCallback">
         /// A callback invoked when an exception occurs. This allows UI layers to display errors without crashing.
         /// </param>
         /// <param name="cancellationToken">A token used to cancel the operation.</param>
-        Task CreateAsync(string assemblyName, string rootNamespace, string targetFramework, Action<Exception> exceptionCallback, CancellationToken cancellationToken);
+        Task CreateAsync(string safeProjectname, string rootNamespace, string targetFramework, Action<Exception> exceptionCallback, CancellationToken cancellationToken);
 
         /// <summary>
         /// Returns a list of available target framework monikers (TFMs) based on the machine's installed .NET SDKs
@@ -102,14 +102,14 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         }
 
         /// <inheritdoc/>
-        public async Task CreateAsync(string assemblyName, string rootNamespace, string targetFramework, Action<Exception> exceptionCallback, CancellationToken cancellationToken)
+        public async Task CreateAsync(string safeProjectname, string rootNamespace, string targetFramework, Action<Exception> exceptionCallback, CancellationToken cancellationToken)
         {
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                if (string.IsNullOrWhiteSpace(assemblyName))
-                    throw new ArgumentException("Project name must not be empty.", nameof(assemblyName));
+                if (string.IsNullOrWhiteSpace(safeProjectname))
+                    throw new ArgumentException("Project name must not be empty.", nameof(safeProjectname));
 
                 if (string.IsNullOrWhiteSpace(rootNamespace))
                     throw new ArgumentException("Base namespace must not be empty.", nameof(rootNamespace));
@@ -123,13 +123,13 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                     throw new InvalidOperationException("No solution is open or the solution directory could not be resolved.");
 
                 // Create project folder under solution directory
-                var projectDir = Path.Combine(solutionDir, assemblyName);
+                var projectDir = Path.Combine(solutionDir, safeProjectname);
                 Directory.CreateDirectory(projectDir);
 
                 // Create project with dotnet new
                 await RunDotNetNewAsync(
                     templateShortName: "classlib",
-                    projectName: assemblyName,
+                    projectName: safeProjectname,
                     outputDir: projectDir,
                     targetFramework: targetFramework,
                     cancellationToken: cancellationToken).ConfigureAwait(false);
