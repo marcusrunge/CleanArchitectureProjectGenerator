@@ -10,6 +10,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
 {
@@ -117,58 +118,43 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 if (string.IsNullOrWhiteSpace(targetFramework))
                     throw new ArgumentException("Target framework (dotNetVersion) must not be empty.", nameof(targetFramework));
 
-                // Get solution directory (must exist and be open)
                 var solutionDir = await GetSolutionDirectoryAsync(cancellationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(solutionDir) || !Directory.Exists(solutionDir))
                     throw new InvalidOperationException("No solution is open or the solution directory could not be resolved.");
 
-                // Create project folder under solution directory
-                var projectDir = Path.Combine(solutionDir, safeProjectname);
+                var fullProjectName = $"{rootNamespace}.{safeProjectname}";
+                var projectDir = BuildProjectDirectory(solutionDir!, rootNamespace, safeProjectname);
                 Directory.CreateDirectory(projectDir);
 
-                // Create project with dotnet new
-                await RunDotNetNewAsync(
-                    templateShortName: "classlib",
-                    projectName: safeProjectname,
-                    outputDir: projectDir,
-                    targetFramework: targetFramework,
-                    cancellationToken: cancellationToken).ConfigureAwait(false);
-
-                cancellationToken.ThrowIfCancellationRequested();
-
-                // Find generated csproj
-                var csprojPath = Directory.GetFiles(projectDir, "*.csproj", SearchOption.TopDirectoryOnly)
-                                          .FirstOrDefault() ?? throw new FileNotFoundException("Project file (*.csproj) was not created by dotnet new.", projectDir);
-
-                // Ensure RootNamespace matches the requested baseNamespace
-                EnsureRootNamespaceInCsproj(csprojPath, rootNamespace);
-
-                cancellationToken.ThrowIfCancellationRequested();
-
-                // Add project to solution (must be on UI thread)
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
                 var dte = _serviceProvider?.GetService(typeof(SDTE)) as EnvDTE80.DTE2;
                 if (dte?.Solution is null)
                     throw new InvalidOperationException("DTE/Solution service is not available.");
 
-                // This adds an existing project file to the solution
-                dte.Solution.AddFromFile(csprojPath);
+                var solution2 = (EnvDTE80.Solution2)dte.Solution;
 
-                // Optional: update bindable property so UI can reflect new namespace if desired
+                var templatePath = solution2.GetProjectTemplate("CleanArchitectureModule.zip", "CSharp");
+
+                solution2.AddFromTemplate(templatePath, projectDir, fullProjectName, Exclusive: false);
+
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var csprojPath = await WaitForCsprojAsync(projectDir, cancellationToken).ConfigureAwait(false);
+
+                EnsureTargetFrameworkInCsproj(csprojPath, targetFramework);
+                EnsurePropertyInCsproj(csprojPath, "RootNamespace", rootNamespace);
+                EnsurePropertyInCsproj(csprojPath, "AssemblyName", safeProjectname);
+
                 RootNamespace = rootNamespace;
             }
             catch (OperationCanceledException)
             {
-                // Don't treat cancellation as an error.
                 throw;
             }
             catch (Exception ex)
             {
                 exceptionCallback?.Invoke(ex);
-                // Depending on your UI flow you can either swallow or rethrow.
-                // Swallowing keeps UI responsive; rethrowing lets caller handle.
-                // Here we swallow to match the "callback-driven" pattern.
             }
         }
 
@@ -229,46 +215,28 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             }
         }
 
-        /// <summary>
-        /// Adds SDK-based TFMs (net5.0+) by probing the dotnet SDK installation directory.
-        /// </summary>
-        /// <param name="targets">The target collection to populate.</param>
         private static void AddDotNetSdkTargets(HashSet<string> targets)
         {
-            // Typical SDK path: %ProgramFiles%\dotnet\sdk
             var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
             var sdkRoot = Path.Combine(programFiles, "dotnet", "sdk");
 
-            // If dotnet isn't installed (or path differs), exit silently.
             if (!Directory.Exists(sdkRoot))
                 return;
 
             foreach (var dir in Directory.GetDirectories(sdkRoot))
             {
-                // SDK directories are versioned, e.g. "8.0.203" or "8.0.100-preview.1".
                 var name = Path.GetFileName(dir);
 
-                // Parse the leading version portion before any '-' suffix.
-                // If parsing fails, ignore this directory.
                 if (!Version.TryParse(name.Split('-')[0], out var version))
                     continue;
 
-                // .NET 5+ uses "net{major}.0" TFMs.
                 if (version.Major >= 5)
-                {
                     targets.Add($"net{version.Major}.0");
-                }
             }
         }
 
-        /// <summary>
-        /// Adds .NET Framework TFMs by probing reference assemblies installed with Visual Studio / targeting packs.
-        /// </summary>
-        /// <param name="targets">The target collection to populate.</param>
         private static void AddNetFrameworkTargets(HashSet<string> targets)
         {
-            // Typical ref assemblies path:
-            // %ProgramFiles(x86)%\Reference Assemblies\Microsoft\Framework\.NETFramework
             var referenceRoot =
                 Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
@@ -283,69 +251,85 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
 
             foreach (var dir in Directory.GetDirectories(referenceRoot))
             {
-                // Folder names are usually "v4.8", "v4.7.2", etc.
                 var name = Path.GetFileName(dir);
 
-                if (name.StartsWith("v"))
-                {
-                    // Convert "v4.7.2" -> "472" and build TFM "net472".
-                    // Note: This matches common TFM formatting for .NET Framework.
-                    var version = name.TrimStart('v').Replace(".", "");
-                    targets.Add($"net{version}");
-                }
+                if (!name.StartsWith("v", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var version = name.TrimStart('v', 'V').Replace(".", "");
+                targets.Add($"net{version}");
             }
         }
 
-        private static void EnsureRootNamespaceInCsproj(string csprojPath, string rootNamespace)
+        private static string BuildProjectDirectory(string solutionDir, string rootNamespace, string safeProjectname)
         {
-            // Edits csproj XML to ensure <RootNamespace> is set
-            var doc = System.Xml.Linq.XDocument.Load(csprojPath);
+            var parts = rootNamespace
+                .Split(['.'], StringSplitOptions.RemoveEmptyEntries)
+                .Select(ToSafePathSegment)
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .ToArray();
 
-            var project = doc.Root;
-            if (project is null)
-                throw new InvalidOperationException("Invalid csproj XML (missing root element).");
+            return Path.Combine([solutionDir, .. parts, .. new[] { ToSafePathSegment(safeProjectname) }]);
+        }
 
-            // SDK-style csproj typically has no XML namespace; but handle both.
-            var ns = project.Name.Namespace;
+        private static void EnsurePropertyInCsproj(string csprojPath, string propertyName, string value)
+        {
+            var doc = XDocument.Load(csprojPath, LoadOptions.PreserveWhitespace);
+            var project = doc.Root ?? throw new InvalidOperationException("Invalid csproj XML (missing root element).");
 
-            // Find or create a PropertyGroup
-            var propertyGroup = project.Elements(ns + "PropertyGroup").FirstOrDefault()
-                                ?? new System.Xml.Linq.XElement(ns + "PropertyGroup");
+            XNamespace ns = project.Name.Namespace;
+
+            var propertyGroup =
+                project.Elements(ns + "PropertyGroup").FirstOrDefault(pg => pg.Attribute("Condition") == null)
+                ?? new XElement(ns + "PropertyGroup");
 
             if (propertyGroup.Parent is null)
                 project.AddFirst(propertyGroup);
 
-            var rootNsElement = propertyGroup.Element(ns + "RootNamespace");
-            if (rootNsElement is null)
+            var el = propertyGroup.Element(ns + propertyName);
+            if (el == null)
             {
-                propertyGroup.Add(new System.Xml.Linq.XElement(ns + "RootNamespace", rootNamespace));
+                el = new XElement(ns + propertyName);
+                propertyGroup.Add(el);
             }
-            else
-            {
-                rootNsElement.Value = rootNamespace;
-            }
+
+            el.Value = value;
 
             doc.Save(csprojPath);
         }
 
-        /// <summary>
-        /// Gets a displayable name for the root of a Visual Studio hierarchy (typically the project name).
-        /// </summary>
-        /// <param name="hierarchy">The hierarchy to query.</param>
-        /// <returns>The project caption or name if available; otherwise <c>null</c>.</returns>
-        /// <remarks>
-        /// Queries VS hierarchy properties in order of preference:
-        /// <list type="number">
-        /// <item><description>Caption (what users usually see in Solution Explorer)</description></item>
-        /// <item><description>Name (fallback)</description></item>
-        /// </list>
-        /// Must be called on the UI thread.
-        /// </remarks>
+        private static void EnsureTargetFrameworkInCsproj(string csprojPath, string targetFramework)
+        {
+            var doc = XDocument.Load(csprojPath, LoadOptions.PreserveWhitespace);
+            var project = doc.Root ?? throw new InvalidOperationException("Invalid csproj XML (missing root element).");
+
+            XNamespace ns = project.Name.Namespace;
+
+            var propertyGroup =
+                project.Elements(ns + "PropertyGroup").FirstOrDefault(pg => pg.Attribute("Condition") == null)
+                ?? new XElement(ns + "PropertyGroup");
+
+            if (propertyGroup.Parent is null)
+                project.AddFirst(propertyGroup);
+
+            propertyGroup.Element(ns + "TargetFrameworks")?.Remove();
+
+            var tf = propertyGroup.Element(ns + "TargetFramework");
+            if (tf == null)
+            {
+                tf = new XElement(ns + "TargetFramework");
+                propertyGroup.AddFirst(tf);
+            }
+
+            tf.Value = targetFramework;
+
+            doc.Save(csprojPath);
+        }
+
         private static string? GetRootProjectName(IVsHierarchy hierarchy)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            // Prefer VSHPROPID_Caption since it reflects the displayed project name.
             if (ErrorHandler.Succeeded(
                     hierarchy.GetProperty(
                         VSConstants.VSITEMID_ROOT,
@@ -357,7 +341,6 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 return caption;
             }
 
-            // Fallback to VSHPROPID_Name if caption isn't available.
             if (ErrorHandler.Succeeded(
                     hierarchy.GetProperty(
                         VSConstants.VSITEMID_ROOT,
@@ -372,81 +355,13 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             return null;
         }
 
-        private static async Task RunDotNetNewAsync(
-            string templateShortName,
-            string projectName,
-            string outputDir,
-            string targetFramework,
-            CancellationToken cancellationToken)
+        private static string ToSafePathSegment(string segment)
         {
-            // dotnet new classlib -n <name> -o <dir> -f <tfm> --no-restore
-            var args =
-                $"new {templateShortName} -n \"{projectName}\" -o \"{outputDir}\" -f \"{targetFramework}\" --no-restore";
-
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "dotnet",
-                Arguments = args,
-                WorkingDirectory = outputDir,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true
-            };
-
-            using var process = new System.Diagnostics.Process { StartInfo = psi, EnableRaisingEvents = true };
-
-            var stdOut = new System.Text.StringBuilder();
-            var stdErr = new System.Text.StringBuilder();
-
-            var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-            process.OutputDataReceived += (_, e) => { if (e.Data != null) stdOut.AppendLine(e.Data); };
-            process.ErrorDataReceived += (_, e) => { if (e.Data != null) stdErr.AppendLine(e.Data); };
-            process.Exited += (_, __) => tcs.TrySetResult(process.ExitCode);
-
-            if (!process.Start())
-                throw new InvalidOperationException("Failed to start 'dotnet' process.");
-
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            using (cancellationToken.Register(() =>
-            {
-                try
-                {
-                    if (!process.HasExited)
-                        process.Kill();
-                }
-                catch
-                {
-                    // Ignore kill failures
-                }
-            }))
-            {
-                var exitCode = await tcs.Task.ConfigureAwait(false);
-
-                if (exitCode != 0)
-                {
-                    throw new InvalidOperationException(
-                        $"dotnet new failed with exit code {exitCode}.\n\nSTDOUT:\n{stdOut}\n\nSTDERR:\n{stdErr}");
-                }
-            }
+            var invalid = Path.GetInvalidFileNameChars();
+            var filtered = new string([.. segment.Where(ch => !invalid.Contains(ch))]).Trim();
+            return string.IsNullOrWhiteSpace(filtered) ? "_" : filtered;
         }
 
-        /// <summary>
-        /// Attempts to retrieve an <see cref="IVsHierarchy"/> from the user's current selection in Visual Studio.
-        /// </summary>
-        /// <param name="monitorSelection">The VS selection service.</param>
-        /// <returns>The selected hierarchy, or <c>null</c> if no hierarchy is selected.</returns>
-        /// <remarks>
-        /// Uses COM interop:
-        /// <list type="bullet">
-        /// <item><description><see cref="IVsMonitorSelection.GetCurrentSelection"/> returns COM pointers that must be released.</description></item>
-        /// <item><description>We convert the hierarchy IUnknown pointer to a managed object via <see cref="Marshal.GetObjectForIUnknown"/>.</description></item>
-        /// </list>
-        /// Must be called on the UI thread.
-        /// </remarks>
         private static IVsHierarchy? TryGetHierarchyFromCurrentSelection(IVsMonitorSelection monitorSelection)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -456,47 +371,28 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
 
             try
             {
-                // Request current selection info from VS.
-                // hierPtr and selContainerPtr are COM pointers and must be released in finally.
                 int hr = monitorSelection.GetCurrentSelection(
                     out hierPtr,
                     out uint itemid,
                     out IVsMultiItemSelect? multiSelect,
                     out selContainerPtr);
 
-                // If the call fails or there is no hierarchy pointer, there is no valid selection hierarchy.
                 if (!ErrorHandler.Succeeded(hr) || hierPtr == IntPtr.Zero)
                     return null;
 
-                // Convert COM pointer to managed IVsHierarchy object.
                 return Marshal.GetObjectForIUnknown(hierPtr) as IVsHierarchy;
             }
             finally
             {
-                // Release COM pointers to prevent leaks.
                 if (hierPtr != IntPtr.Zero) Marshal.Release(hierPtr);
                 if (selContainerPtr != IntPtr.Zero) Marshal.Release(selContainerPtr);
             }
         }
 
-        /// <summary>
-        /// Attempts to retrieve the startup project hierarchy when there is no suitable current selection.
-        /// </summary>
-        /// <param name="monitorSelection">The VS selection service.</param>
-        /// <returns>The startup project hierarchy, or <c>null</c> if not available.</returns>
-        /// <remarks>
-        /// The returned value can be:
-        /// <list type="bullet">
-        /// <item><description>An <see cref="IVsHierarchy"/> directly</description></item>
-        /// <item><description>An <see cref="IntPtr"/> to a COM object</description></item>
-        /// </list>
-        /// Must be called on the UI thread.
-        /// </remarks>
         private static IVsHierarchy? TryGetStartupProjectHierarchy(IVsMonitorSelection monitorSelection)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            // SEID_StartupProject provides the startup project (if set).
             int hr = monitorSelection.GetCurrentElementValue(
                 (uint)VSConstants.VSSELELEMID.SEID_StartupProject,
                 out object value);
@@ -504,27 +400,41 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             if (!ErrorHandler.Succeeded(hr) || value is null)
                 return null;
 
-            // Sometimes VS already returns a managed IVsHierarchy.
             if (value is IVsHierarchy hier)
                 return hier;
 
-            // In other cases, it returns a COM pointer to the hierarchy.
             if (value is IntPtr ptr && ptr != IntPtr.Zero)
                 return Marshal.GetObjectForIUnknown(ptr) as IVsHierarchy;
 
             return null;
         }
 
+        private static async Task<string> WaitForCsprojAsync(string projectDir, CancellationToken ct)
+        {
+            for (int i = 0; i < 30; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var csproj = Directory.GetFiles(projectDir, "*.csproj", SearchOption.TopDirectoryOnly)
+                                      .FirstOrDefault();
+
+                if (!string.IsNullOrWhiteSpace(csproj))
+                    return csproj;
+
+                await Task.Delay(100, ct).ConfigureAwait(false);
+            }
+
+            throw new FileNotFoundException("Project file (*.csproj) was not created from template.", projectDir);
+        }
+
         private async Task<string?> GetSolutionDirectoryAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
             if (_serviceProvider.GetService(typeof(SVsSolution)) is not IVsSolution solution)
                 return null;
 
-            // If no solution is open, GetSolutionInfo often returns empty strings.
             ErrorHandler.ThrowOnFailure(solution.GetSolutionInfo(out var solutionDir, out _, out _));
             return solutionDir;
         }

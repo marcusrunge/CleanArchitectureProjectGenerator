@@ -82,21 +82,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
         /// When the project name changes, <see cref="BaseNamespace"/> is updated by combining the
         /// inferred root namespace from <paramref name="generatorService"/> with the project name.
         /// </remarks>
-        public string? ProjectName
-        {
-            get => _projectName;
-            set
-            {
-                // Update backing field and raise PropertyChanged if the value actually changed.
-                SetProperty(ref _projectName, value);
-
-                // Derive BaseNamespace from the generator service's inferred namespace plus the project name.
-                // Note: This will produce strings like "RootNamespace.ProjectName".
-                // If generatorService.Namespace is null, this becomes " .{value}" (string interpolation yields " .x"?),
-                // but we keep logic unchanged as requested.
-                BaseNamespace = $"{generatorService.RootNamespace}.{value}";
-            }
-        }
+        public string? ProjectName { get => _projectName; set => SetProperty(ref _projectName, value); }
 
         public string? RootNamespace { get => _rootNamespace; set => SetProperty(ref _rootNamespace, value); }
 
