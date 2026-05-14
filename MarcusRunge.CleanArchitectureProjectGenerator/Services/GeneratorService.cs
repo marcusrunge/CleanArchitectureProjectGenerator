@@ -97,11 +97,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         private string? _namespace;
 
         /// <inheritdoc/>
-        public string? RootNamespace
-        {
-            get => _namespace;
-            set => SetProperty(ref _namespace, value);
-        }
+        public string? RootNamespace { get => _namespace; set => SetProperty(ref _namespace, value); }
 
         /// <inheritdoc/>
         public async Task CreateAsync(string safeProjectname, string rootNamespace, string targetFramework, Action<Exception> exceptionCallback, CancellationToken cancellationToken)
@@ -135,17 +131,10 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
 
                 var solution2 = (EnvDTE80.Solution2)dte.Solution;
 
-                //var templatePath = solution2.GetProjectTemplate("CleanArchitectureModule.zip", "CSharp");
-
-                //solution2.AddFromTemplate(templatePath, projectDir, fullProjectName, Exclusive: false);
-
                 var extensionDir = Path.GetDirectoryName(typeof(GeneratorService).Assembly.Location)
                     ?? throw new InvalidOperationException("Extension directory could not be resolved.");
 
-                var templateZipPath = Path.Combine(
-    extensionDir,
-    "Resources",
-    "CleanArchitectureModule.zip");
+                var templateZipPath = Path.Combine(extensionDir, "Resources", "CleanArchitectureModule.zip");
 
                 if (!File.Exists(templateZipPath))
                 {
@@ -185,19 +174,16 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                         $"CleanArchitectureModule.csproj was not found next to the .vstemplate. Expected: {templateCsprojPath}",
                         templateCsprojPath);
                 }
-
-                System.Diagnostics.Debug.WriteLine($"Template zip: {templateZipPath}");
-                System.Diagnostics.Debug.WriteLine($"Temp template dir: {tempTemplateDir}");
-                System.Diagnostics.Debug.WriteLine($"VSTemplate path: {vstemplatePath}");
-                System.Diagnostics.Debug.WriteLine($"Template csproj: {templateCsprojPath}");
-
-                solution2.AddFromTemplate(vstemplatePath, projectDir, fullProjectName, Exclusive: false);
-
+                EnsureTargetFrameworkInCsproj(templateCsprojPath, targetFramework);
+                EnsurePropertyInCsproj(templateCsprojPath, "Nullable", "enable");
+                EnsureCustomParameterInVstemplate(vstemplatePath, "$rootnamespace$", rootNamespace);
+                solution2.AddFromTemplate(vstemplatePath, projectDir, safeProjectname, Exclusive: false);
 
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var csprojPath = await WaitForCsprojAsync(projectDir, cancellationToken).ConfigureAwait(false);
 
+                EnsurePropertyInCsproj(csprojPath, "Nullable", "enable");
                 EnsureTargetFrameworkInCsproj(csprojPath, targetFramework);
                 EnsurePropertyInCsproj(csprojPath, "RootNamespace", rootNamespace);
                 EnsurePropertyInCsproj(csprojPath, "AssemblyName", safeProjectname);
@@ -326,6 +312,51 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 .ToArray();
 
             return Path.Combine([solutionDir, .. parts, .. new[] { ToSafePathSegment(safeProjectname) }]);
+        }
+
+        private static void EnsureCustomParameterInVstemplate(
+                                            string vstemplatePath,
+    string parameterName,
+    string value)
+        {
+            var doc = XDocument.Load(vstemplatePath, LoadOptions.PreserveWhitespace);
+            var root = doc.Root ?? throw new InvalidOperationException("Invalid vstemplate XML.");
+
+            XNamespace ns = root.Name.Namespace;
+
+            var templateContent = root.Element(ns + "TemplateContent");
+            if (templateContent == null)
+                throw new InvalidOperationException("Invalid vstemplate XML. Missing TemplateContent element.");
+
+            var customParameters = templateContent.Element(ns + "CustomParameters");
+            if (customParameters == null)
+            {
+                customParameters = new XElement(ns + "CustomParameters");
+                templateContent.AddFirst(customParameters);
+            }
+
+            var existing = customParameters
+                .Elements(ns + "CustomParameter")
+                .FirstOrDefault(e =>
+                    string.Equals(
+                        (string?)e.Attribute("Name"),
+                        parameterName,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (existing == null)
+            {
+                customParameters.Add(
+                    new XElement(
+                        ns + "CustomParameter",
+                        new XAttribute("Name", parameterName),
+                        new XAttribute("Value", value)));
+            }
+            else
+            {
+                existing.SetAttributeValue("Value", value);
+            }
+
+            doc.Save(vstemplatePath);
         }
 
         private static void EnsurePropertyInCsproj(string csprojPath, string propertyName, string value)
