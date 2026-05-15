@@ -62,7 +62,7 @@
     <None Update="Resources\CleanArchitectureModule.zip">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="Resources\ProjectCreatorToolWindowCommandMenuIcon.png">
+    <None Update="Resources\CreateProjectCommandMenuIcon.png">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>
