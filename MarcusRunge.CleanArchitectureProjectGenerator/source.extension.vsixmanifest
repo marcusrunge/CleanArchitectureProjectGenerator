@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="MarcusRunge.CleanArchitectureProjectGenerator.05ee75c8-d9b3-4d12-892d-314574466705" Version="1.0" Language="en-US" Publisher="MarcusRunge.CleanArchitectureProjectGenerator" />
-    <DisplayName>MarcusRunge.CleanArchitectureProjectGenerator</DisplayName>
-    <Description>Empty VSIX Project.</Description>
+    <Identity Id="MarcusRunge.CleanArchitectureProjectGenerator.05ee75c8-d9b3-4d12-892d-314574466705" Version="1.0" Language="en-001" Publisher="Marcus Runge" />
+    <DisplayName>Clean Architecture Project Generator</DisplayName>
+    <Description>A Visual Studio extension that generates modular Clean Architecture projects based on a predefined structure.</Description>
   </Metadata>
   <Installation>
     <InstallationTarget Id="Microsoft.VisualStudio.Community" Version="[17.14, )">
