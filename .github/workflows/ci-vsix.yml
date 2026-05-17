@@ -8,11 +8,11 @@ on:
   workflow_dispatch:
 
 env:
-  SOLUTION_FILE: MyExtension.sln
+  SOLUTION_FILE: CleanArchitectureProjectGenerator.slnx
   BUILD_CONFIGURATION: Release
   PLATFORM: "Any CPU"
   ARTIFACT_DIR: ${{ github.workspace }}\artifacts
-  VSIX_NAME: MyExtension.vsix
+  VSIX_NAME: CleanArchitectureProjectGenerator.vsix
 
 jobs:
   build:
