@@ -1,4 +1,5 @@
-﻿using Microsoft.VisualStudio.Shell;
+﻿using MarcusRunge.CleanArchitectureProjectGenerator.Properties;
+using Microsoft.VisualStudio.Shell;
 using System;
 using System.Runtime.InteropServices;
 
@@ -23,12 +24,12 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Views
         /// </summary>
         public ProjectCreatorToolWindow() : base(null)
         {
-            this.Caption = "Clean Architecture Project Generator";
+            Caption = Resources.ProjectCreatorToolWindowCaption;
 
             // This is the user control hosted by the tool window; Note that, even if this class implements IDisposable,
             // we are not calling Dispose on this object. This is because ToolWindowPane calls Dispose on
             // the object returned by the Content property.
-            this.Content = new ProjectCreatorToolWindowControl();
+            Content = new ProjectCreatorToolWindowControl();
         }
     }
 }

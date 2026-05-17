@@ -97,6 +97,15 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Properties {
         }
         
         /// <summary>
+        ///   Sucht eine lokalisierte Zeichenfolge, die Clean Architecture Project Generator ähnelt.
+        /// </summary>
+        public static string ProjectCreatorToolWindowCaption {
+            get {
+                return ResourceManager.GetString("ProjectCreatorToolWindowCaption", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Sucht eine lokalisierte Zeichenfolge, die Project Name ähnelt.
         /// </summary>
         public static string ProjectName {

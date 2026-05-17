@@ -13,6 +13,7 @@
              d:DataContext="{d:DesignInstance Type=viewmodels:ProjectCreatorToolWindowViewModel}"
              Background="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowBackgroundKey}}"
              Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+             DataContext="{x:Null}"
              helpers:ToolWindowCloser.CloseRequested="{Binding IsOnCloseRequested}">
     <!--<i:Interaction.Triggers>
         <i:EventTrigger EventName="Loaded">

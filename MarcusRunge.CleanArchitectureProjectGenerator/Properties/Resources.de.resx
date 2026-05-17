@@ -123,6 +123,9 @@
   <data name="Cancel" xml:space="preserve">
     <value>Abbrechen</value>
   </data>
+  <data name="ProjectCreatorToolWindowCaption" xml:space="preserve">
+    <value>Clean Architecture Project Generator</value>
+  </data>
   <data name="Create" xml:space="preserve">
     <value>Erzeugen</value>
   </data>
