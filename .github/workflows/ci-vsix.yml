@@ -1,0 +1,57 @@
+﻿name: CI - Build VSIX
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+env:
+  SOLUTION_FILE: MyExtension.sln
+  BUILD_CONFIGURATION: Release
+  PLATFORM: "Any CPU"
+  ARTIFACT_DIR: ${{ github.workspace }}\artifacts
+  VSIX_NAME: MyExtension.vsix
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Stellt MSBuild im PATH bereit (sonst muss man es per vswhere suchen)
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+        # Hinweis: Action findet MSBuild per vswhere und setzt PATH. [3](https://github.com/microsoft/setup-msbuild)
+
+      # NuGet.exe installieren (für klassische restore-Szenarien)
+      - name: Setup NuGet
+        uses: nuget/setup-nuget@v3
+        # Diese Action legt nuget.exe in PATH. [4](https://github.com/NuGet/setup-nuget)
+
+      - name: Restore NuGet packages
+        run: nuget restore "${{ env.SOLUTION_FILE }}"
+
+      - name: Build & create VSIX
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "${{ env.ARTIFACT_DIR }}" | Out-Null
+
+          msbuild "${{ env.SOLUTION_FILE }}" `
+            /t:Build `
+            /p:Configuration="${{ env.BUILD_CONFIGURATION }}" `
+            /p:Platform="${{ env.PLATFORM }}" `
+            /p:DeployExtension="False" `
+            /p:TargetVsixContainer="${{ env.ARTIFACT_DIR }}\${{ env.VSIX_NAME }}" `
+            /verbosity:minimal
+
+      # VSIX als Build-Artifact sichern (v4 empfohlen)
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: artifacts/**/*.vsix
+          if-no-files-found: error
