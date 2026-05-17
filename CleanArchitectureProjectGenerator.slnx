@@ -1,4 +1,8 @@
 <Solution>
+  <Folder Name="/Projektmappenelemente/">
+    <File Path=".git/workflows/ci-vsix.yml" />
+    <File Path="README.md" />
+  </Folder>
   <Project Path="MarcusRunge.CleanArchitectureProjectGenerator/MarcusRunge.CleanArchitectureProjectGenerator.csproj">
     <Deploy />
   </Project>
