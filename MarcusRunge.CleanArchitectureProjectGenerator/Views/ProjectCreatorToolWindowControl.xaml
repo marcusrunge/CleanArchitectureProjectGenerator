@@ -14,7 +14,7 @@
              Background="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowBackgroundKey}}"
              Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
              DataContext="{x:Null}"
-             helpers:ToolWindowCloser.CloseRequested="{Binding IsOnCloseRequested}">
+             helpers:ToolWindowCloser.CloseRequested="{Binding IsOnCloseRequested, Mode=TwoWay}">
     <!--<i:Interaction.Triggers>
         <i:EventTrigger EventName="Loaded">
             <i:InvokeCommandAction Command="{Binding LoadedCommand, Mode=OneWay}" />

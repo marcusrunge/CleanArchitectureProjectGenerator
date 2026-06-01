@@ -1,6 +1,7 @@
 ﻿using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
 using System.Windows;
+using System.Windows.Data;
 
 namespace MarcusRunge.CleanArchitectureProjectGenerator.Helpers
 {
@@ -90,37 +91,49 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Helpers
         /// <remarks>
         /// This method performs the actual tool window close operation when the flag becomes <c>true</c>.
         /// </remarks>
-        private static void OnCloseRequestedChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private static void OnCloseRequestedChanged(
+    DependencyObject d,
+    DependencyPropertyChangedEventArgs e)
         {
-            // We only act when the flag transitions to true.
-            // Any other value (false, unset) means "do nothing".
-            if (e.NewValue is true)
+            // Only consume true as a close request.
+            if (e.NewValue is not true)
+                return;
+
+            var frame = GetFrame(d);
+
+            // Even if there is no frame, consume/reset the request.
+            // Otherwise the flag may remain true forever.
+            if (frame == null)
             {
-                // The tool window frame must be provided (typically set by the tool window command).
-                // Without a frame there is nothing to close.
-                var frame = GetFrame(d);
-                if (frame == null)
-                    return;
-
-                // Closing a VS tool window frame must happen on the main (UI) thread.
-                // RunAsync allows this property-changed callback to remain synchronous and non-blocking.
-                ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
-                {
-                    // Ensure we're on the VS UI thread before touching shell UI objects.
-                    await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-
-                    // Close the frame without prompting to save tool window state.
-                    // FRAMECLOSE_NoSave is commonly used for tool windows.
-                    frame.CloseFrame((uint)__FRAMECLOSE.FRAMECLOSE_NoSave);
-                })
-                // FileAndForget reports failures to VS telemetry/logging facilities rather than crashing the process.
-                // The string identifies the task "operation name" for diagnostics.
-                .FileAndForget("ToolWindowCloser/CloseFrame");
-
-                // Reset the flag so the same binding can trigger another close request later.
-                // Without resetting, setting it to true again would not raise a property change.
-                d.SetValue(CloseRequestedProperty, false);
+                ResetCloseRequested(d);
+                return;
             }
+
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+
+                try
+                {
+                    frame.CloseFrame((uint)__FRAMECLOSE.FRAMECLOSE_NoSave);
+                }
+                finally
+                {
+                    // Reset only after CloseFrame has been called.
+                    ResetCloseRequested(d);
+                }
+            })
+            .FileAndForget("ToolWindowCloser/CloseFrame");
+        }
+
+        private static void ResetCloseRequested(DependencyObject d)
+        {
+            // Prefer SetCurrentValue so an existing binding is not replaced.
+            d.SetCurrentValue(CloseRequestedProperty, false);
+
+            // If CloseRequested is bound TwoWay, push the reset back to the source VM property.
+            var binding = BindingOperations.GetBindingExpression(d, CloseRequestedProperty);
+            binding?.UpdateSource();
         }
     }
 }

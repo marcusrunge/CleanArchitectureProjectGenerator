@@ -100,7 +100,12 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         public string? RootNamespace { get => _namespace; set => SetProperty(ref _namespace, value); }
 
         /// <inheritdoc/>
-        public async Task CreateAsync(string safeProjectname, string rootNamespace, string targetFramework, Action<Exception> exceptionCallback, CancellationToken cancellationToken)
+        public async Task CreateAsync(
+            string safeProjectname,
+            string rootNamespace,
+            string targetFramework,
+            Action<Exception> exceptionCallback,
+            CancellationToken cancellationToken)
         {
             try
             {
@@ -123,9 +128,17 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 if (string.IsNullOrWhiteSpace(solutionDir) || !Directory.Exists(solutionDir))
                     throw new InvalidOperationException("No solution is open or the solution directory could not be resolved.");
 
-                // Build the final project identity and destination path from the selected namespace and project name.
-                var fullProjectName = $"{rootNamespace}.{safeProjectname}";
-                var projectDir = BuildProjectDirectory(solutionDir!, rootNamespace, safeProjectname);
+                // Build the final project identity and destination path.
+                //
+                // Example:
+                // solutionDir     = C:\Users\mru\source\repos\SmallBusinessOperations
+                // rootNamespace   = SmallBusinessOperations
+                // safeProjectname = Products
+                //
+                // fullProjectName = SmallBusinessOperations.Products
+                // projectDir      = C:\Users\mru\source\repos\SmallBusinessOperations\SmallBusinessOperations.Products
+                var fullProjectName = BuildFullProjectName(rootNamespace, safeProjectname);
+                var projectDir = BuildProjectDirectory(solutionDir!, fullProjectName);
 
                 // Ensure the physical target directory exists before Visual Studio adds the project from the template.
                 Directory.CreateDirectory(projectDir);
@@ -196,9 +209,17 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 // Configure the extracted template project before Visual Studio creates the actual solution project.
                 EnsureTargetFrameworkInCsproj(templateCsprojPath, targetFramework);
                 EnsurePropertyInCsproj(templateCsprojPath, "Nullable", "enable");
-                EnsureCustomParameterInVstemplate(vstemplatePath, "$rootnamespace$", rootNamespace);
+
+                // Important:
+                // Use the full project namespace here, for example:
+                // SmallBusinessOperations.Products
+                EnsureCustomParameterInVstemplate(vstemplatePath, "$rootnamespace$", fullProjectName);
 
                 // Add the customized project template to the current solution.
+                //
+                // Important:
+                // The project name passed to AddFromTemplate should match the folder/project convention:
+                // SmallBusinessOperations.Products
                 solution2.AddFromTemplate(vstemplatePath, projectDir, safeProjectname, Exclusive: false);
 
                 // Check again after template creation because project generation may take time.
@@ -210,10 +231,17 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 // Normalize important project properties after creation to ensure the generated project is consistent.
                 EnsurePropertyInCsproj(csprojPath, "Nullable", "enable");
                 EnsureTargetFrameworkInCsproj(csprojPath, targetFramework);
-                EnsurePropertyInCsproj(csprojPath, "RootNamespace", rootNamespace);
-                EnsurePropertyInCsproj(csprojPath, "AssemblyName", safeProjectname);
+
+                // Important:
+                // These should match the actual generated project identity.
+                EnsurePropertyInCsproj(csprojPath, "RootNamespace", fullProjectName);
+                EnsurePropertyInCsproj(csprojPath, "AssemblyName", fullProjectName);
 
                 // Update bindable state so the UI reflects the namespace used for generation.
+                //
+                // Keep this as the root/base namespace, not the generated project namespace.
+                // Example:
+                // RootNamespace = SmallBusinessOperations
                 RootNamespace = rootNamespace;
             }
             catch (OperationCanceledException)
@@ -341,23 +369,32 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             }
         }
 
-        private static string BuildProjectDirectory(string solutionDir, string rootNamespace, string safeProjectname)
+        private static string BuildFullProjectName(string rootNamespace, string safeProjectname)
         {
-            // Split the namespace into folder segments so namespaces map naturally to directory structure.
-            var parts = rootNamespace
-                .Split(['.'], StringSplitOptions.RemoveEmptyEntries)
-                .Select(ToSafePathSegment)
-                .Where(p => !string.IsNullOrWhiteSpace(p))
-                .ToArray();
+            var cleanRootNamespace = rootNamespace.Trim();
+            var cleanProjectName = safeProjectname.Trim();
 
-            // Combine the solution path, namespace folders, and project name into the final project directory.
-            return Path.Combine([solutionDir, .. parts, .. new[] { ToSafePathSegment(safeProjectname) }]);
+            if (cleanProjectName.Equals(cleanRootNamespace, StringComparison.OrdinalIgnoreCase))
+                return cleanProjectName;
+
+            if (cleanProjectName.StartsWith(cleanRootNamespace + ".", StringComparison.OrdinalIgnoreCase))
+                return cleanProjectName;
+
+            return $"{cleanRootNamespace}.{cleanProjectName}";
         }
 
-        private static void EnsureCustomParameterInVstemplate(
-                                            string vstemplatePath,
-    string parameterName,
-    string value)
+        private static string BuildProjectDirectory(string solutionDir, string fullProjectName)
+        {
+            if (string.IsNullOrWhiteSpace(solutionDir))
+                throw new ArgumentException("Solution directory must not be empty.", nameof(solutionDir));
+
+            if (string.IsNullOrWhiteSpace(fullProjectName))
+                throw new ArgumentException("Full project name must not be empty.", nameof(fullProjectName));
+
+            return Path.Combine(solutionDir, ToSafePathSegment(fullProjectName));
+        }
+
+        private static void EnsureCustomParameterInVstemplate(string vstemplatePath, string parameterName, string value)
         {
             // Load the .vstemplate while preserving formatting as much as possible.
             var doc = XDocument.Load(vstemplatePath, LoadOptions.PreserveWhitespace);
