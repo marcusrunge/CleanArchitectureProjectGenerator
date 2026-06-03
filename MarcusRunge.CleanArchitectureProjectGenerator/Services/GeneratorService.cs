@@ -128,16 +128,11 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 if (string.IsNullOrWhiteSpace(solutionDir) || !Directory.Exists(solutionDir))
                     throw new InvalidOperationException("No solution is open or the solution directory could not be resolved.");
 
-                // Build the final project identity and destination path.
-                //
-                // Example:
-                // solutionDir     = C:\Users\mru\source\repos\SmallBusinessOperations
-                // rootNamespace   = SmallBusinessOperations
-                // safeProjectname = Products
-                //
-                // fullProjectName = SmallBusinessOperations.Products
-                // projectDir      = C:\Users\mru\source\repos\SmallBusinessOperations\SmallBusinessOperations.Products
+                // Build the full project name and target directory based on the user input and current context.
+
                 var fullProjectName = BuildFullProjectName(rootNamespace, safeProjectname);
+                var shortProjectName = BuildShortProjectName(rootNamespace, safeProjectname);
+                var baseNamespace = rootNamespace.Trim().Trim('.');
                 var projectDir = BuildProjectDirectory(solutionDir!, fullProjectName);
 
                 // Ensure the physical target directory exists before Visual Studio adds the project from the template.
@@ -210,17 +205,17 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 EnsureTargetFrameworkInCsproj(templateCsprojPath, targetFramework);
                 EnsurePropertyInCsproj(templateCsprojPath, "Nullable", "enable");
 
-                // Important:
-                // Use the full project namespace here, for example:
-                // SmallBusinessOperations.Products
+                // Pass important information to the template through custom parameters so it can be used in template variable replacements.
                 EnsureCustomParameterInVstemplate(vstemplatePath, "$rootnamespace$", fullProjectName);
+                EnsureCustomParameterInVstemplate(vstemplatePath, "$shortprojectname$", shortProjectName);
+                EnsureCustomParameterInVstemplate(vstemplatePath, "$basenamespace$", baseNamespace);
 
                 // Add the customized project template to the current solution.
                 //
                 // Important:
                 // The project name passed to AddFromTemplate should match the folder/project convention:
                 // SmallBusinessOperations.Products
-                solution2.AddFromTemplate(vstemplatePath, projectDir, safeProjectname, Exclusive: false);
+                solution2.AddFromTemplate(vstemplatePath, projectDir, fullProjectName, Exclusive: false);
 
                 // Check again after template creation because project generation may take time.
                 cancellationToken.ThrowIfCancellationRequested();
@@ -313,6 +308,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             }
         }
 
+        // Discovers installed .NET SDKs by inspecting the standard SDK installation directory and inferring target frameworks from folder names.
         private static void AddDotNetSdkTargets(HashSet<string> targets)
         {
             // .NET SDKs are installed under Program Files\dotnet\sdk on a standard Windows installation.
@@ -338,6 +334,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             }
         }
 
+        // .NET Framework reference assemblies are installed in the x86 Program Files folder, even on 64-bit machines.
         private static void AddNetFrameworkTargets(HashSet<string> targets)
         {
             // .NET Framework reference assemblies are installed in the x86 Program Files folder.
@@ -369,31 +366,85 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             }
         }
 
-        private static string BuildFullProjectName(string rootNamespace, string safeProjectname)
+        // Builds the full project name (used for namespaces and assembly names) by combining the root namespace and the user-entered project name, ensuring proper formatting and avoiding duplication.
+        private static string BuildFullProjectName(string rootNamespace, string projectName)
         {
-            var cleanRootNamespace = rootNamespace.Trim();
-            var cleanProjectName = safeProjectname.Trim();
-
+            // Validate inputs to ensure the resulting project name can be constructed meaningfully.
+            if (string.IsNullOrWhiteSpace(rootNamespace))
+                throw new ArgumentException("Root namespace must not be empty.", nameof(rootNamespace));
+            // The project name is required to build the full project name, even if it ends up being the same as the root namespace.
+            if (string.IsNullOrWhiteSpace(projectName))
+                throw new ArgumentException("Project name must not be empty.", nameof(projectName));
+            // Clean up the inputs by trimming whitespace and dots to ensure consistent formatting and comparison.
+            var cleanRootNamespace = rootNamespace.Trim().Trim('.');
+            var cleanProjectName = projectName.Trim().Trim('.');
+            // If the project name is exactly the same as the root namespace, return it directly to avoid duplication.
             if (cleanProjectName.Equals(cleanRootNamespace, StringComparison.OrdinalIgnoreCase))
-                return cleanProjectName;
-
+                return cleanRootNamespace;
+            // If the project name already starts with the root namespace followed by a dot, return it as is to avoid adding the root namespace twice.
             if (cleanProjectName.StartsWith(cleanRootNamespace + ".", StringComparison.OrdinalIgnoreCase))
                 return cleanProjectName;
-
-            return $"{cleanRootNamespace}.{cleanProjectName}";
+            // Otherwise, combine the root namespace and project name with a dot separator to form the full project name.
+            var shortProjectName = BuildShortProjectName(rootNamespace, cleanProjectName);
+            // The full project name is the root namespace followed by the short project name, ensuring that the root namespace is not duplicated if it was included in the project name.
+            return $"{cleanRootNamespace}.{shortProjectName}";
         }
 
+        // Combines the solution directory with the full project name to determine the target directory for project creation, ensuring the project name is a safe path segment.
         private static string BuildProjectDirectory(string solutionDir, string fullProjectName)
         {
+            // Validate inputs to ensure the resulting path can be constructed safely.
             if (string.IsNullOrWhiteSpace(solutionDir))
                 throw new ArgumentException("Solution directory must not be empty.", nameof(solutionDir));
-
+            // The full project name is required to determine the target directory and should be validated to avoid invalid paths.
             if (string.IsNullOrWhiteSpace(fullProjectName))
                 throw new ArgumentException("Full project name must not be empty.", nameof(fullProjectName));
-
+            // Clean up the solution directory path to ensure it does not have trailing whitespace or invalid characters.
             return Path.Combine(solutionDir, ToSafePathSegment(fullProjectName));
         }
 
+        // Builds a short project name for template parameters by removing the root namespace prefix from the user-entered project name, if it exists, to allow for cleaner class and namespace generation within the template.
+        private static string BuildShortProjectName(string rootNamespace, string projectName)
+        {
+            // Validate inputs to ensure the method can perform string manipulations safely.
+            if (string.IsNullOrWhiteSpace(rootNamespace))
+                throw new ArgumentException("Root namespace must not be empty.", nameof(rootNamespace));
+            // The project name is required to determine the short name, even if it ends up being the same as the root namespace.
+            if (string.IsNullOrWhiteSpace(projectName))
+                throw new ArgumentException("Project name must not be empty.", nameof(projectName));
+            // Clean up the inputs by trimming whitespace and dots to ensure consistent comparison and formatting.
+            var cleanRootNamespace = rootNamespace.Trim().Trim('.');
+            var cleanProjectName = projectName.Trim().Trim('.');
+            // If the project name is exactly the same as the root namespace, return it as the short name to avoid empty strings.
+            if (cleanProjectName.Equals(cleanRootNamespace, StringComparison.OrdinalIgnoreCase))
+            {
+                // The short name is the same as the root namespace in this case, so return it directly.
+                var lastDotIndex = cleanProjectName.LastIndexOf('.');
+                // If there is a dot in the project name, return the substring after the last dot to get the short name. This handles cases where the project name has multiple segments but is identical to the root namespace, for example "Company.Product" with root namespace "Company" would yield "Product".
+                if (lastDotIndex >= 0 && lastDotIndex < cleanProjectName.Length - 1)
+                    return cleanProjectName.Substring(lastDotIndex + 1);
+
+                return cleanProjectName;
+            }
+            // If the project name starts with the root namespace followed by a dot, remove that prefix to get the short name.
+            if (cleanProjectName.StartsWith(cleanRootNamespace + ".", StringComparison.OrdinalIgnoreCase))
+            {
+                // The short name is the part of the project name that comes after the root namespace and the following dot.
+                return cleanProjectName.Substring(cleanRootNamespace.Length + 1);
+            }
+            // If the project name does not start with the root namespace, return the last segment after the final dot as the short name, or the full project name if there are no dots.
+            var projectNameLastDotIndex = cleanProjectName.LastIndexOf('.');
+            // If there is a dot and it's not the last character, return the substring after the last dot as the short name.
+            if (projectNameLastDotIndex >= 0 && projectNameLastDotIndex < cleanProjectName.Length - 1)
+            {
+                // This handles cases where the project name has multiple segments but does not start with the root namespace, for example "Company.Product.Module" would yield "Module".
+                return cleanProjectName.Substring(projectNameLastDotIndex + 1);
+            }
+            // If there are no dots, the short name is the same as the project name.
+            return cleanProjectName;
+        }
+
+        // Ensures a custom parameter with the specified name and value exists in the .vstemplate file, which allows passing information to the template during project creation.
         private static void EnsureCustomParameterInVstemplate(string vstemplatePath, string parameterName, string value)
         {
             // Load the .vstemplate while preserving formatting as much as possible.
@@ -445,6 +496,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             doc.Save(vstemplatePath);
         }
 
+        // Ensures the specified property is set to the given value in the project file, creating the property if it does not exist.
         private static void EnsurePropertyInCsproj(string csprojPath, string propertyName, string value)
         {
             // Load the project file while preserving whitespace to minimize formatting changes.
@@ -479,6 +531,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             doc.Save(csprojPath);
         }
 
+        // Ensures the specified target framework is set in the project file, replacing any existing TargetFramework or TargetFrameworks properties.
         private static void EnsureTargetFrameworkInCsproj(string csprojPath, string targetFramework)
         {
             // Load the project file so target framework information can be normalized.
@@ -516,6 +569,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             doc.Save(csprojPath);
         }
 
+        // Extracts a user-friendly project name from the root of the given Visual Studio hierarchy, preferring the caption but falling back to the internal name if necessary.
         private static string? GetRootProjectName(IVsHierarchy hierarchy)
         {
             // Visual Studio hierarchy properties must be read on the UI thread.
@@ -549,6 +603,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             return null;
         }
 
+        // Converts an arbitrary string into a safe path segment by removing invalid characters and trimming whitespace.
         private static string ToSafePathSegment(string segment)
         {
             // Remove characters that are invalid in file or directory names.
@@ -559,6 +614,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             return string.IsNullOrWhiteSpace(filtered) ? "_" : filtered;
         }
 
+        // Tries to get the IVsHierarchy of the currently selected item in Solution Explorer, if any.
         private static IVsHierarchy? TryGetHierarchyFromCurrentSelection(IVsMonitorSelection monitorSelection)
         {
             // Current selection information is provided by the Visual Studio shell and requires the UI thread.
@@ -592,6 +648,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             }
         }
 
+        // Tries to get the hierarchy of the startup project defined in the current Visual Studio solution, if any.
         private static IVsHierarchy? TryGetStartupProjectHierarchy(IVsMonitorSelection monitorSelection)
         {
             // Startup project information is part of the Visual Studio selection context and requires the UI thread.
@@ -618,6 +675,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             return null;
         }
 
+        // Waits asynchronously for a .csproj file to appear in the specified project directory, which indicates that Visual Studio has completed project creation from the template.
         private static async Task<string> WaitForCsprojAsync(string projectDir, CancellationToken ct)
         {
             // Poll briefly because Visual Studio template creation may write the project file asynchronously.
@@ -642,6 +700,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             throw new FileNotFoundException("Project file (*.csproj) was not created from template.", projectDir);
         }
 
+        // Retrieves the directory of the currently loaded solution in Visual Studio.
         private async Task<string?> GetSolutionDirectoryAsync(CancellationToken cancellationToken)
         {
             // Stop immediately if the caller no longer needs the solution directory.
