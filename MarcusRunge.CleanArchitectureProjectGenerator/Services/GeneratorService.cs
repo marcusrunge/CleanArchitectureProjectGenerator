@@ -9,7 +9,6 @@ using System.ComponentModel.Composition;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml.Linq;
@@ -207,6 +206,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
 
                 // Pass important information to the template through custom parameters so it can be used in template variable replacements.
                 EnsureCustomParameterInVstemplate(vstemplatePath, "$rootnamespace$", fullProjectName);
+                EnsureCustomParameterInVstemplate(vstemplatePath, "$projectnamespace$", fullProjectName);
                 EnsureCustomParameterInVstemplate(vstemplatePath, "$shortprojectname$", shortProjectName);
                 EnsureCustomParameterInVstemplate(vstemplatePath, "$basenamespace$", baseNamespace);
 
@@ -742,7 +742,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         }
 
         // Recursively constructs the relative path of a solution folder project within the solution hierarchy by traversing its parent projects.
-        private static string GetSolutionFolderRelativePath(EnvDTE.Project solutionFolderProject)
+        private static string GetSolutionFolderRelativePath(Project solutionFolderProject)
         {
             // Ensure this method is called on the UI thread because it accesses DTE project properties.
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -802,7 +802,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         }
 
         // Determines whether the specified project is a solution folder by comparing its kind to the known solution folder GUID.
-        private static bool IsSolutionFolder(EnvDTE.Project project) => string.Equals(project?.Kind, EnvDTE80.ProjectKinds.vsProjectKindSolutionFolder, StringComparison.OrdinalIgnoreCase);
+        private static bool IsSolutionFolder(Project project) => string.Equals(project?.Kind, EnvDTE80.ProjectKinds.vsProjectKindSolutionFolder, StringComparison.OrdinalIgnoreCase);
 
         // Normalizes a namespace string by trimming whitespace and dots, splitting into segments, and ensuring each segment is a valid C# identifier.
         private static string NormalizeNamespace(string value)
@@ -926,7 +926,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         }
 
         // Recursively searches for a solution folder project that matches the specified relative path within the solution.
-        private static bool TryFindSolutionFolderProject(EnvDTE.Solution solution, string? relativeSolutionFolderPath, out EnvDTE.Project solutionFolderProject)
+        private static bool TryFindSolutionFolderProject(Solution solution, string? relativeSolutionFolderPath, out Project solutionFolderProject)
         {
             // Ensure this method is called on the UI thread because it accesses DTE project properties.
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -939,7 +939,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 // If the relative solution folder path is null or empty, there is no solution folder to find, so return false.
                 return false;
             // Iterate through each top-level project in the solution to find a matching solution folder project based on the provided path segments.
-            foreach (EnvDTE.Project project in solution.Projects)
+            foreach (Project project in solution.Projects)
             {
                 // Recursively check if the current project or any of its subprojects match the desired solution folder path. If a match is found, return true and set the out parameter.
                 if (TryFindSolutionFolderProject(project, segments, 0, out solutionFolderProject))
@@ -951,7 +951,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         }
 
         // Recursively searches for a solution folder project that matches the specified path segments.
-        private static bool TryFindSolutionFolderProject(EnvDTE.Project project, string[]? segments, int index, out EnvDTE.Project solutionFolderProject)
+        private static bool TryFindSolutionFolderProject(Project project, string[]? segments, int index, out Project solutionFolderProject)
         {
             // Ensure this method is called on the UI thread because it accesses DTE project properties.
             ThreadHelper.ThrowIfNotOnUIThread();
@@ -976,7 +976,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             if (project.ProjectItems == null)
                 return false;
             // Iterate through each project item in the current solution folder to find subprojects that may match the next segment in the path.
-            foreach (EnvDTE.ProjectItem item in project.ProjectItems)
+            foreach (ProjectItem item in project.ProjectItems)
             {
                 // Check if the project item has a subproject. If it does not, skip to the next item.
                 var subProject = item.SubProject;
@@ -1008,20 +1008,20 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 return null;
 
             // The first selected item is typically the one we want to inspect for solution folder context.
-            if (selectedItems.GetValue(0) is not EnvDTE.UIHierarchyItem selectedItem)
+            if (selectedItems.GetValue(0) is not UIHierarchyItem selectedItem)
                 // If the selected item is not a UIHierarchyItem, we cannot determine the solution folder context.
                 return null;
             // Initialize a variable to hold the selected project, which may be a solution folder or a regular project.
-            EnvDTE.Project? selectedProject = null;
+            Project? selectedProject = null;
 
             // Case 1: Visual Studio delivers a Project directly when a solution folder is selected in Solution Explorer.
-            selectedProject = selectedItem.Object as EnvDTE.Project;
+            selectedProject = selectedItem.Object as Project;
 
             // Case 2: If the selected item is a ProjectItem, it may represent a subproject within a solution folder. In that case, we can access the SubProject property to get the actual project.
             if (selectedProject == null)
             {
                 // If the selected item is a ProjectItem, check if it has a SubProject, which would indicate that it is part of a solution folder.
-                if (selectedItem.Object is EnvDTE.ProjectItem selectedProjectItem)
+                if (selectedItem.Object is ProjectItem selectedProjectItem)
                     selectedProject = selectedProjectItem.SubProject;
             }
             // If we still don't have a selected project, it means the selection does not correspond to a solution folder or a project item with a subproject.
