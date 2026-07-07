@@ -9,15 +9,19 @@
 				   priority="0x0600">
 				<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_SOLNNODE" />
 			</Group>
+			<Group guid="guidCleanArchitectureProjectGeneratorPackageCmdSet"
+				   id="SolutionFolderContextGroup"
+				   priority="0x0600">
+				<Parent guid="guidSHLMainMenu" id="IDM_VS_CTXT_SOLNFOLDER" />
+			</Group>
 		</Groups>
 		<Buttons>
 			<Button guid="guidCleanArchitectureProjectGeneratorPackageCmdSet"
 					id="ProjectCreatorToolWindowCommandId"
 					priority="0x0100"
 					type="Button">
-				<Parent
-				  guid="guidCleanArchitectureProjectGeneratorPackageCmdSet"
-				  id="SolutionContextGroup" />
+				<Parent guid="guidCleanArchitectureProjectGeneratorPackageCmdSet"
+						id="SolutionContextGroup" />
 				<Icon guid="guidImages" id="bmpPic1" />
 				<Strings>
 					<ButtonText>Clean Architecture Project Generator</ButtonText>
@@ -28,11 +32,22 @@
 			<Bitmap guid="guidImages" href="Resources\CreateProjectCommandMenuIcon.png" usedList="bmpPic1" />
 		</Bitmaps>
 	</Commands>
+
+	<CommandPlacements>
+		<CommandPlacement guid="guidCleanArchitectureProjectGeneratorPackageCmdSet"
+						  id="ProjectCreatorToolWindowCommandId"
+						  priority="0x0100">
+			<Parent guid="guidCleanArchitectureProjectGeneratorPackageCmdSet"
+					id="SolutionFolderContextGroup" />
+		</CommandPlacement>
+	</CommandPlacements>
+
 	<Symbols>
 		<GuidSymbol name="guidCleanArchitectureProjectGeneratorPackage" value="{50b566e8-80fe-4de9-9e20-ddc69f0dec1a}" />
 		<GuidSymbol name="guidCleanArchitectureProjectGeneratorPackageCmdSet" value="{5f8e3682-65e2-4b21-b209-1eecd93d7bbf}">
 			<IDSymbol name="ProjectCreatorToolWindowCommandId" value="0x0100" />
 			<IDSymbol name="SolutionContextGroup" value="0x1020" />
+			<IDSymbol name="SolutionFolderContextGroup" value="0x1021" />
 		</GuidSymbol>
 		<GuidSymbol name="guidImages" value="{f17035ad-2877-4ebb-9668-3f378041c917}">
 			<IDSymbol name="bmpPic1" value="1" />
