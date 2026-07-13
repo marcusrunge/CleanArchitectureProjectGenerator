@@ -767,7 +767,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 current = parentProjectItem.ContainingProject;
             }
             // Join the segments using the system's directory separator character to form the final relative path string and return it.
-            return string.Join(Path.DirectorySeparatorChar.ToString(), segments.ToArray());
+            return string.Join(Path.DirectorySeparatorChar.ToString(), [.. segments]);
         }
 
         // Checks if any installed .NET SDK supports netstandard2.1 by inspecting the SDK installation directory and parsing version numbers.
