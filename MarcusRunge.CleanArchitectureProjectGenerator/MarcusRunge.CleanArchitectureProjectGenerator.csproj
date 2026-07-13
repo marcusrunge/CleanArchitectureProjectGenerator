@@ -1,101 +1,129 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net472</TargetFramework>
-    <Nullable>enable</Nullable>
-    <LangVersion>14</LangVersion>
+	<PropertyGroup>
+		<TargetFramework>net481</TargetFramework>
+		<Nullable>enable</Nullable>
+		<LangVersion>14</LangVersion>
 
-    <!-- VSIX settings -->
-    <VSSDKBuildToolsAutoSetup>true</VSSDKBuildToolsAutoSetup>
-    <GeneratePkgDefFile>true</GeneratePkgDefFile>
-    <RootNamespace>MarcusRunge.CleanArchitectureProjectGenerator</RootNamespace>
-    <UseWPF>true</UseWPF>
-    <Title>Clean Architecture Project Generator</Title>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <RepositoryUrl>https://github.com/marcusrunge/CleanArchitectureProjectGenerator</RepositoryUrl>
-    <Authors>Marcus Runge</Authors>
-    <Product>Clean Architecture Project Generator</Product>
-    <Description>Visual Studio extension to quickly create projects based on Clean Architecture principles. Generates a structured solution template with predefined layers and best practices.</Description>
-    <Copyright>© 2026 Marcus Runge</Copyright>
-    <PackageTags>visual studio;clean architecture;template;generator;dotnet;project scaffold</PackageTags>
-    <NeutralLanguage>en-001</NeutralLanguage>
-    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
-    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
-    <AssemblyName>CleanArchitectureProjectGenerator</AssemblyName>
-    <Version>1.3.1</Version>
-  </PropertyGroup>
+		<VSSDKBuildToolsAutoSetup>true</VSSDKBuildToolsAutoSetup>
+		<GeneratePkgDefFile>true</GeneratePkgDefFile>
 
-  <ItemGroup>
-    <None Remove="CleanArchitectureProjectGeneratorPackage.vsct" />
-    <None Remove="ProjectCreatorToolWindowControl.xaml" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectCapability Include="CreateVsixContainer" />
-  </ItemGroup>
-  <ItemGroup>    
-    <PackageReference Include="MessagePack" Version="3.1.7" />    
-    <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.14.40265" ExcludeAssets="runtime" />
-    <PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034">
-      <PrivateAssets>all</PrivateAssets>
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-    </PackageReference>
-	<PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.142" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="PresentationCore" />
-    <Reference Include="PresentationFramework" />
-    <Reference Include="System.Activities" />
-    <Reference Include="System.ComponentModel.Composition" />
-    <Reference Include="System.Design" />
-    <Reference Include="System.ServiceModel" />
-    <Reference Include="System.ServiceModel.Activities" />
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="System.Xaml" />
-  </ItemGroup>
-  <ItemGroup>
-    <VSCTCompile Include="CleanArchitectureProjectGeneratorPackage.vsct">
-      <ResourceName>Menus.ctmenu</ResourceName>
-      <Generator>VsctGenerator</Generator>
-    </VSCTCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <Compile Update="Properties\Resources.Designer.cs">
-      <DesignTime>True</DesignTime>
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Resources.resx</DependentUpon>
-    </Compile>
-    <Compile Update="Views\ProjectCreatorToolWindowControl.xaml.cs">
-      <DependentUpon>$toolWindowControl$.xaml</DependentUpon>
-    </Compile>
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Update="Properties\Resources.resx">
-      <Generator>PublicResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
-    </EmbeddedResource>
-  </ItemGroup>
-  <ItemGroup>
-    <None Update="LICENSE.txt">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-    </None>
-    <None Update="Resources\CleanArchitectureModule.zip">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="Resources\CreateProjectCommandMenuIcon.png">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <Page Update="Views\ProjectCreatorToolWindowControl.xaml">
-      <Generator>MSBuild:Compile</Generator>
-    </Page>
-  </ItemGroup>
+		<RootNamespace>MarcusRunge.CleanArchitectureProjectGenerator</RootNamespace>
+		<AssemblyName>CleanArchitectureProjectGenerator</AssemblyName>
+
+		<UseWPF>true</UseWPF>
+
+		<Title>Clean Architecture Project Generator</Title>
+		<Product>Clean Architecture Project Generator</Product>
+		<Authors>Marcus Runge</Authors>
+
+		<Description>Visual Studio extension to quickly create projects based on Clean Architecture principles. Generates a structured solution template with predefined layers and best practices.</Description>
+
+		<RepositoryUrl>https://github.com/marcusrunge/CleanArchitectureProjectGenerator</RepositoryUrl>
+
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+		<PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+
+		<PackageTags>visual studio;clean architecture;template;generator;dotnet;project scaffold</PackageTags>
+
+		<NeutralLanguage>en-001</NeutralLanguage>
+
+		<Copyright>© 2026 Marcus Runge</Copyright>
+
+		<Version>1.3.2</Version>
+	</PropertyGroup>
+
 	<ItemGroup>
+		<ProjectCapability Include="CreateVsixContainer" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Remove="CleanArchitectureProjectGeneratorPackage.vsct" />
+		<None Remove="ProjectCreatorToolWindowControl.xaml" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="MessagePack" Version="3.1.7" />
+		<PackageReference Include="Microsoft.VisualStudio.SDK"
+						  Version="17.14.40265"
+						  ExcludeAssets="runtime" />
+		<PackageReference Include="Microsoft.VSSDK.BuildTools"
+						  Version="18.5.40034">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime;build;native;contentfiles;analyzers;buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.Xaml.Behaviors.Wpf"
+						  Version="1.1.142" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="Microsoft.CSharp" />
+		<Reference Include="PresentationCore" />
+		<Reference Include="PresentationFramework" />
+		<Reference Include="System.Activities" />
+		<Reference Include="System.ComponentModel.Composition" />
+		<Reference Include="System.Design" />
+		<Reference Include="System.ServiceModel" />
+		<Reference Include="System.ServiceModel.Activities" />
+		<Reference Include="System.Windows.Forms" />
+		<Reference Include="System.Xaml" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<VSCTCompile Include="CleanArchitectureProjectGeneratorPackage.vsct">
+			<ResourceName>Menus.ctmenu</ResourceName>
+			<Generator>VsctGenerator</Generator>
+		</VSCTCompile>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Compile Update="Properties\Resources.Designer.cs">
+			<DesignTime>true</DesignTime>
+			<AutoGen>true</AutoGen>
+			<DependentUpon>Resources.resx</DependentUpon>
+		</Compile>
+
+		<Compile Update="Views\ProjectCreatorToolWindowControl.xaml.cs">
+			<DependentUpon>$toolWindowControl$.xaml</DependentUpon>
+		</Compile>
+	</ItemGroup>
+
+	<ItemGroup>
+		<EmbeddedResource Update="Properties\Resources.resx">
+			<Generator>PublicResXFileCodeGenerator</Generator>
+			<LastGenOutput>Resources.Designer.cs</LastGenOutput>
+		</EmbeddedResource>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Page Update="Views\ProjectCreatorToolWindowControl.xaml">
+			<Generator>MSBuild:Compile</Generator>
+		</Page>
+	</ItemGroup>
+
+	<!-- VSIX Content -->
+
+	<ItemGroup>
+		<Content Include="LICENSE.txt">
+			<IncludeInVSIX>true</IncludeInVSIX>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+
+		<Content Include="Resources\CleanArchitectureProjectGenerator.png">
+			<IncludeInVSIX>true</IncludeInVSIX>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+
+		<Content Include="Resources\CreateProjectCommandMenuIcon.png">
+			<IncludeInVSIX>true</IncludeInVSIX>
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</Content>
+
 		<Content Include="Resources\CleanArchitectureModule.zip">
 			<IncludeInVSIX>true</IncludeInVSIX>
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</Content>
 	</ItemGroup>
+
 </Project>
