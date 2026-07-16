@@ -4,8 +4,10 @@ using MarcusRunge.CleanArchitectureProjectGenerator.Constants;
 using MarcusRunge.CleanArchitectureProjectGenerator.Contracts;
 using MarcusRunge.CleanArchitectureProjectGenerator.Services;
 using Microsoft.VisualStudio.Composition;
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel.Composition;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -40,12 +42,21 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
         private bool _isOnCloseRequested, _isRootNamespaceSelected;
 
         // Backing fields for bindable properties used by the UI.
-        private string? _projectName, _baseNamespace, _rootNamespace, _selectedDotNetVersion;
+        private string? _projectName, _baseNamespace, _projectFileName, _projectFolderPath, _rootNamespace, _selectedDotNetVersion;
 
         /// <summary>
         /// Gets or sets the base namespace used for generated code (e.g., "Company.Product.Module").
         /// </summary>
-        public string? BaseNamespace { get => _baseNamespace; set => SetProperty(ref _baseNamespace, value); }
+
+        public string? BaseNamespace
+        {
+            get => _baseNamespace;
+            set
+            {
+                if (SetProperty(ref _baseNamespace, value))
+                    UpdateDerivedProperties();
+            }
+        }
 
         /// <summary>
         /// Gets the command invoked by the UI buttons (Cancel/Create), using a string command parameter.
@@ -73,7 +84,32 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
         /// </remarks>
         public bool IsOnCloseRequested { get => _isOnCloseRequested; set => SetProperty(ref _isOnCloseRequested, value); }
 
-        public bool IsRootNamespaceSelected { get => _isRootNamespaceSelected; set => SetProperty(ref _isRootNamespaceSelected, value); }
+        /// <summary>
+        /// Gets or sets a value indicating whether this instance is root namespace selected.
+        /// </summary>
+        /// <value>
+        ///   <c>true</c> if this instance is root namespace selected; otherwise, <c>false</c>.
+        /// </value>
+
+        public bool IsRootNamespaceSelected
+        {
+            get => _isRootNamespaceSelected;
+            set
+            {
+                if (SetProperty(ref _isRootNamespaceSelected, value))
+                    UpdateDerivedProperties();
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the name of the project file.
+        /// </summary>
+        public string? ProjectFileName { get => _projectFileName; set => SetProperty(ref _projectFileName, value); }
+
+        /// <summary>
+        /// Gets or sets the project folder path.
+        /// </summary>
+        public string? ProjectFolderPath { get => _projectFolderPath; set => SetProperty(ref _projectFolderPath, value); }
 
         /// <summary>
         /// Gets or sets the project name entered by the user.
@@ -82,9 +118,30 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
         /// When the project name changes, <see cref="BaseNamespace"/> is updated by combining the
         /// inferred root namespace from <paramref name="generatorService"/> with the project name.
         /// </remarks>
-        public string? ProjectName { get => _projectName; set => SetProperty(ref _projectName, value); }
 
-        public string? RootNamespace { get => _rootNamespace; set => SetProperty(ref _rootNamespace, value); }
+        public string? ProjectName
+        {
+            get => _projectName;
+            set
+            {
+                if (SetProperty(ref _projectName, value))
+                    UpdateDerivedProperties();
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the root namespace.
+        /// </summary>
+
+        public string? RootNamespace
+        {
+            get => _rootNamespace;
+            set
+            {
+                if (SetProperty(ref _rootNamespace, value))
+                    UpdateDerivedProperties();
+            }
+        }
 
         /// <summary>
         /// Gets or sets the currently selected target framework (TFM) in the UI.
@@ -110,6 +167,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
             // Use the inferred namespace as the initial base namespace shown to the user.
             BaseNamespace = generatorService.RootNamespace;
             RootNamespace = generatorService.RootNamespace;
+            ProjectFolderPath = generatorService.SuggestedProjectFolderPath;
 
             // Query available TFMs (e.g., net8.0, net48) for a dropdown/list in the UI.
             var dotNetVersions = await generatorService.GetDotNetVersionsAsync(ex => { }, cancellationToken);
@@ -162,13 +220,43 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.ViewModels
             }
             else if (parameter == ButtonCommandParameters.Create && !string.IsNullOrWhiteSpace(ProjectName) && !string.IsNullOrWhiteSpace(BaseNamespace) && !string.IsNullOrWhiteSpace(SelectedDotNetVersion) && !string.IsNullOrWhiteSpace(RootNamespace))
             {
-                await generatorService.CreateAsync(IsRootNamespaceSelected ? $"{RootNamespace!}.{ProjectName!}" : ProjectName!, BaseNamespace!, SelectedDotNetVersion!, ex => { }, CancellationToken.None);
+                await generatorService.CreateAsync(ProjectName!, ProjectFileName!, ProjectFolderPath!, GetProjectNamespace()!, SelectedDotNetVersion!, ex => { }, CancellationToken.None);
+
                 IsOnCloseRequested = true;
             }
             else
             {
                 // Unknown command parameter: ignore (defensive default).
                 return;
+            }
+        }
+
+        private string? GetProjectNamespace()
+        {
+            if (string.IsNullOrWhiteSpace(ProjectName))
+                return string.Empty;
+
+            if (!IsRootNamespaceSelected)
+                return ProjectName;
+
+            return $"{BaseNamespace}.{ProjectName}";
+        }
+
+        private void UpdateDerivedProperties()
+        {
+            if (string.IsNullOrWhiteSpace(ProjectName))
+                return;
+
+            var projectNamespace = GetProjectNamespace();
+
+            if (string.IsNullOrWhiteSpace(projectNamespace))
+                return;
+
+            ProjectFileName = projectNamespace!.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ? projectNamespace : $"{projectNamespace}.csproj";
+
+            if (!string.IsNullOrWhiteSpace(generatorService.SuggestedProjectFolderPath))
+            {
+                ProjectFolderPath = Path.Combine(generatorService.SuggestedProjectFolderPath, ProjectName);
             }
         }
     }

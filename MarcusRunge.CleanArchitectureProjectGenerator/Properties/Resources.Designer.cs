@@ -106,6 +106,24 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Properties {
         }
         
         /// <summary>
+        ///   Sucht eine lokalisierte Zeichenfolge, die Project file name ähnelt.
+        /// </summary>
+        public static string ProjectFileName {
+            get {
+                return ResourceManager.GetString("ProjectFileName", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Sucht eine lokalisierte Zeichenfolge, die Project folder path ähnelt.
+        /// </summary>
+        public static string ProjectFolderPath {
+            get {
+                return ResourceManager.GetString("ProjectFolderPath", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Sucht eine lokalisierte Zeichenfolge, die Project Name ähnelt.
         /// </summary>
         public static string ProjectName {

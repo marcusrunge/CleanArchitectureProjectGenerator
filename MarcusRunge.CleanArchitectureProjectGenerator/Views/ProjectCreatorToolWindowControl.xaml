@@ -28,6 +28,8 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -71,6 +73,28 @@
         <StackPanel Grid.Row="2">
             <TextBlock Margin="0,0,0,4"
                FontWeight="SemiBold"
+               Text="{x:Static properties:Resources.ProjectFolderPath}" />
+
+            <TextBox Style="{DynamicResource {x:Static vsshell:VsResourceKeys.TextBoxStyleKey}}"
+             MinHeight="26"
+             Text="{Binding ProjectFolderPath, UpdateSourceTrigger=PropertyChanged}"
+             VerticalContentAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="3">
+            <TextBlock Margin="0,0,0,4"
+               FontWeight="SemiBold"
+               Text="{x:Static properties:Resources.ProjectFileName}" />
+
+            <TextBox Style="{DynamicResource {x:Static vsshell:VsResourceKeys.TextBoxStyleKey}}"
+             MinHeight="26"
+             Text="{Binding ProjectFileName, UpdateSourceTrigger=PropertyChanged}"
+             VerticalContentAlignment="Center" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="4">
+            <TextBlock Margin="0,0,0,4"
+               FontWeight="SemiBold"
                Text="{x:Static properties:Resources.DotNetVersion}" />
 
             <ComboBox Style="{DynamicResource {x:Static vsshell:VsResourceKeys.ComboBoxStyleKey}}"
@@ -81,7 +105,7 @@
         </StackPanel>
 
         <!-- Command row -->
-        <StackPanel Grid.Row="3" Margin="0,12,0,0">
+        <StackPanel Grid.Row="5" Margin="0,12,0,0">
             <Border Height="1"
                     Margin="0,0,0,8"
                     Background="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarMenuSeparatorKey}}" />
