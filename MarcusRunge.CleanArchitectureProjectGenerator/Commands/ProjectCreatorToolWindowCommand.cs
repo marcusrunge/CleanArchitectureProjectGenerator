@@ -148,7 +148,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
                             lifetimeCts.Dispose();
                             return;
                         }
-                        catch (Exception ex)
+                        catch (Exception)
                         {
                             // Always dispose resources on error to prevent leaks.
                             lifetimeCts.Dispose();
@@ -184,7 +184,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
                                 {
                                     // If you later make OnUnloadedAsync cancellable, you can ignore expected cancellation here.
                                 }
-                                catch (Exception ex)
+                                catch (Exception)
                                 {
                                     // TODO: Log the exception (avoid silently swallowing unexpected failures).
                                 }
@@ -225,9 +225,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Commands
 
             // Resolve the ViewModel from MEF.
             // If null: it's likely not exported ([Export]) or not included in the VSIX composition.
-            var vm = componentModel.GetService<ProjectCreatorToolWindowViewModel>()
-                     ?? throw new InvalidOperationException(
-                         "ViewModel not found. Is it exported via [Export] and included in VSIX?");
+            var vm = componentModel.GetService<ProjectCreatorToolWindowViewModel>() ?? throw new InvalidOperationException("ViewModel not found. Is it exported via [Export] and included in VSIX?");
 
             return vm;
         }

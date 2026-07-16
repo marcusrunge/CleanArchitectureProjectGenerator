@@ -135,4 +135,10 @@
   <data name="ProjectName" xml:space="preserve">
     <value>Project Name</value>
   </data>
+  <data name="ProjectFolderPath" xml:space="preserve">
+    <value>Project folder path</value>
+  </data>
+  <data name="ProjectFileName" xml:space="preserve">
+    <value>Project file name</value>
+  </data>
 </root>

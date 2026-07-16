@@ -38,16 +38,49 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         string? RootNamespace { get; set; }
 
         /// <summary>
-        /// Creates/generates the project artifacts.
+        /// Gets the suggested project folder path.
         /// </summary>
-        /// <param name="safeProjectname">The name of the assembly to create, typically entered by the user.</param>
-        /// <param name="rootNamespace">The base root namespace to use for the generated code, often derived from <see cref="RootNamespace"/> and <paramref name="projectName"/>.</param>
-        /// <param name="targetFramework">The target framework moniker (TFM) selected by the user (e.g., <c>net8.0</c>, <c>net48</c>).</param>
-        /// <param name="exceptionCallback">
-        /// A callback invoked when an exception occurs. This allows UI layers to display errors without crashing.
+        string? SuggestedProjectFolderPath { get; }
+
+        /// <summary>
+        /// Creates a new project from the configured template.
+        /// </summary>
+        /// <param name="projectName">
+        /// The short project name entered by the user.
+        /// Example: "Repository".
+        /// This value is used for generated artifacts such as
+        /// RepositoryFactory, IRepositoryFactory, RepositoryBase, etc.
         /// </param>
-        /// <param name="cancellationToken">A token used to cancel the operation.</param>
-        Task CreateAsync(string safeProjectname, string rootNamespace, string targetFramework, Action<Exception> exceptionCallback, CancellationToken cancellationToken);
+        /// <param name="projectFileName">
+        /// The target project file name, including the .csproj extension.
+        /// Example:
+        /// "MarcusRunge.Mopr.Workbench.Services.Repository.csproj".
+        /// </param>
+        /// <param name="projectFolderPath">
+        /// The target project directory relative to the solution root.
+        /// Example:
+        /// "MarcusRunge.Mopr.Workbench\Services\Repository".
+        /// </param>
+        /// <param name="projectNamespace">
+        /// The namespace used by the generated project.
+        /// Examples:
+        /// "MarcusRunge.Mopr.Workbench.Services.Repository"
+        /// or
+        /// "Repository".
+        /// </param>
+        /// <param name="targetFramework">
+        /// The target framework moniker (TFM) selected by the user.
+        /// Examples:
+        /// "net10.0", "net8.0", "net481".
+        /// </param>
+        /// <param name="exceptionCallback">
+        /// Callback invoked whenever an exception occurs during
+        /// project creation.
+        /// </param>
+        /// <param name="cancellationToken">
+        /// Token used to cancel the generation process.
+        /// </param>
+        Task CreateAsync(string projectName, string projectFileName, string projectFolderPath, string projectNamespace, string targetFramework, Action<Exception> exceptionCallback, CancellationToken cancellationToken);
 
         /// <summary>
         /// Returns a list of available target framework monikers (TFMs) based on the machine's installed .NET SDKs
@@ -92,8 +125,8 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         /// </summary>
         private readonly IServiceProvider _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
 
-        // Backing field for the bindable Namespace property.
-        private string? _namespace;
+        // Backing field for the bindable Namespace and SuggestedProjectFolderPath properties.
+        private string? _namespace, _suggestedProjectFolderPath;
 
         // Backing field for the selected solution folder relative path, used to determine where to place the generated project within the solution.
         private string? _selectedSolutionFolderRelativePath;
@@ -102,152 +135,154 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
         public string? RootNamespace { get => _namespace; set => SetProperty(ref _namespace, value); }
 
         /// <inheritdoc/>
-        public async Task CreateAsync(string safeProjectname, string rootNamespace, string targetFramework, Action<Exception> exceptionCallback, CancellationToken cancellationToken)
+        public string? SuggestedProjectFolderPath { get => _suggestedProjectFolderPath; private set => SetProperty(ref _suggestedProjectFolderPath, value); }
+
+        /// <inheritdoc/>
+        public async Task CreateAsync(string projectName, string projectFileName, string projectFolderPath, string projectNamespace, string targetFramework, Action<Exception> exceptionCallback, CancellationToken cancellationToken)
         {
-            // Initialize a variable to hold the path to the temporary template directory, which will be used for extracting and customizing the project template.
+            // Holds the temporary extraction directory used to unpack and customize
+            // the project template before it is imported into the solution.
             string? tempTemplateDir = null;
+
             try
             {
-                // Stop immediately if the caller has already requested cancellation.
+                // Stop immediately if cancellation was already requested.
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // Validate required user/project inputs before touching the file system or Visual Studio services.
-                if (string.IsNullOrWhiteSpace(safeProjectname))
-                    throw new ArgumentException("Project name must not be empty.", nameof(safeProjectname));
-                // Validate that the root namespace is provided, as it is essential for generating the project structure and namespaces.
-                if (string.IsNullOrWhiteSpace(rootNamespace))
-                    throw new ArgumentException("Base namespace must not be empty.", nameof(rootNamespace));
-                // Validate that the target framework is provided, as it is essential for generating the project with the correct framework settings.
+                // Validate required input values.
+                if (string.IsNullOrWhiteSpace(projectName))
+                    throw new ArgumentException("Project name must not be empty.", nameof(projectName));
+
+                if (string.IsNullOrWhiteSpace(projectFileName))
+                    throw new ArgumentException("Project file name must not be empty.", nameof(projectFileName));
+
+                if (string.IsNullOrWhiteSpace(projectFolderPath))
+                    throw new ArgumentException("Project folder path must not be empty.", nameof(projectFolderPath));
+
+                if (string.IsNullOrWhiteSpace(projectNamespace))
+                    throw new ArgumentException("Project namespace must not be empty.", nameof(projectNamespace));
+
                 if (string.IsNullOrWhiteSpace(targetFramework))
-                    throw new ArgumentException("Target framework (dotNetVersion) must not be empty.", nameof(targetFramework));
+                    throw new ArgumentException("Target framework must not be empty.", nameof(targetFramework));
 
-                // Resolve the currently opened solution directory; generation must happen inside an existing solution.
-                var solutionDir = await GetSolutionDirectoryAsync(cancellationToken).ConfigureAwait(false);
-                // If the solution directory could not be resolved, throw an exception to indicate that project generation cannot proceed.
+                // Resolve the currently opened solution directory.
+                var solutionDir =
+                    await GetSolutionDirectoryAsync(cancellationToken).ConfigureAwait(false);
+
                 if (string.IsNullOrWhiteSpace(solutionDir) || !Directory.Exists(solutionDir))
-                    // If the solution directory is not available, it indicates that no solution is open or the path could not be determined.
+                {
                     throw new InvalidOperationException("No solution is open or the solution directory could not be resolved.");
+                }
 
-                // Build the full project name and target directory based on the current solution-folder context.
-                var selectedSolutionFolderRelativePath = _selectedSolutionFolderRelativePath;
-                // Normalize the root namespace to ensure it is a valid namespace segment, removing any invalid characters or formatting issues.
-                var baseNamespace = NormalizeNamespace(rootNamespace);
+                // Normalize the namespace used for AssemblyName and RootNamespace.
+                var normalizedProjectNamespace = NormalizeNamespace(projectNamespace);
 
-                // Extract the last segment of the user-entered project name to use as the short project name for class and namespace generation.
-                var projectNamePart = ExtractLastPathOrNamespaceSegment(safeProjectname);
-                // Build the short project name by removing the root namespace prefix from the user-entered project name, if it exists, to allow for cleaner class and namespace generation within the template.
-                var shortProjectName = BuildShortProjectName(baseNamespace, projectNamePart);
-                // Normalize the short project name to ensure it is a valid namespace segment, removing any invalid characters or formatting issues.
-                shortProjectName = NormalizeNamespaceSegment(shortProjectName);
-                // Build the full project name by combining the base namespace and the short project name, ensuring proper formatting and avoiding duplication.
-                var fullProjectName = BuildFullProjectName(baseNamespace, shortProjectName);
-                // Determine the target project directory based on the solution directory, optional solution folder path, and the full project name.
-                var projectDir = BuildProjectDirectory(solutionDir!, selectedSolutionFolderRelativePath, fullProjectName);
+                // Ensure the project file name contains the .csproj extension.
+                projectFileName = EnsureCsprojExtension(projectFileName);
 
-                // Ensure the physical target directory exists before Visual Studio adds the project from the template.
+                // Resolve the physical project directory relative to the solution root.
+                var projectDir = Path.Combine(solutionDir, projectFolderPath);
+
+                // Ensure the destination directory exists.
                 Directory.CreateDirectory(projectDir);
 
-                // Switch to the UI thread because DTE and Visual Studio shell services are apartment-threaded.
+                // Switch to the UI thread because Visual Studio automation APIs
+                // are apartment-threaded.
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
-                // Retrieve the Visual Studio automation object used to add projects to the current solution.
                 var dte = _serviceProvider?.GetService(typeof(SDTE)) as EnvDTE80.DTE2;
-                // Check that the DTE service and solution are available; if not, throw an exception to indicate that project generation cannot proceed.
+
                 if (dte?.Solution is null)
                     throw new InvalidOperationException("DTE/Solution service is not available.");
 
-                // Solution2 exposes AddFromTemplate, which is required for project-template based generation.
                 var solution2 = (EnvDTE80.Solution2)dte.Solution;
 
-                // Locate the installed extension directory so bundled template resources can be loaded.
+                // Locate the extension installation directory.
                 var extensionDir = Path.GetDirectoryName(typeof(GeneratorService).Assembly.Location) ?? throw new InvalidOperationException("Extension directory could not be resolved.");
 
-                // The clean architecture project template is packaged as a zip file within the extension resources.
+                // Locate the bundled project template.
                 var templateZipPath = Path.Combine(extensionDir, "Resources", "CleanArchitectureModule.zip");
-                // Check that the template zip file exists; if not, throw a FileNotFoundException to indicate that the required template resource is missing.
+
                 if (!File.Exists(templateZipPath))
                 {
-                    // If the template zip file is missing, throw a FileNotFoundException to indicate that the required template resource is not available for project generation.
                     throw new FileNotFoundException($"Template zip was not found at expected path: {templateZipPath}", templateZipPath);
                 }
 
-                // Extract the template into an isolated temporary folder so template XML/project files can be customized.
+                // Extract the template into a temporary customization folder.
                 tempTemplateDir = Path.Combine(Path.GetTempPath(), "MarcusRunge.CleanArchitectureProjectGenerator", Guid.NewGuid().ToString("N"));
-                // Ensure the temporary template directory exists before extracting the template zip file.
+
                 Directory.CreateDirectory(tempTemplateDir);
 
-                // Unpack the template archive before locating and modifying its .vstemplate and .csproj files.
                 ZipFile.ExtractToDirectory(templateZipPath, tempTemplateDir);
 
-                // Find the Visual Studio template manifest that describes how the project should be created.
                 var vstemplatePath = Directory.GetFiles(tempTemplateDir, "*.vstemplate", SearchOption.AllDirectories).FirstOrDefault();
-                // Check that the .vstemplate file was found; if not, throw a FileNotFoundException to indicate that the required template manifest is missing from the extracted template.
-                if (string.IsNullOrWhiteSpace(vstemplatePath) || !File.Exists(vstemplatePath))
+
+                if (string.IsNullOrWhiteSpace(vstemplatePath))
                 {
-                    // If the .vstemplate file is missing,
                     throw new FileNotFoundException($"No .vstemplate file was found inside template zip: {templateZipPath}", templateZipPath);
                 }
 
-                // The template root is the folder containing the .vstemplate file and expected project file.
                 var templateRoot = Path.GetDirectoryName(vstemplatePath) ?? throw new InvalidOperationException("Template root could not be resolved.");
 
-                // Locate the template project file so framework and compiler options can be adjusted before import.
                 var templateCsprojPath = Path.Combine(templateRoot, "CleanArchitectureModule.csproj");
-                // Check that the template .csproj file exists; if not, throw a FileNotFoundException to indicate that the required project file is missing from the extracted template.
+
                 if (!File.Exists(templateCsprojPath))
                 {
-                    // If the template .csproj file is missing,
                     throw new FileNotFoundException($"CleanArchitectureModule.csproj was not found next to the .vstemplate. Expected: {templateCsprojPath}", templateCsprojPath);
                 }
 
-                // Configure the extracted template project before Visual Studio creates the actual solution project.
+                // Configure the extracted template before creation.
                 EnsureTargetFrameworkInCsproj(templateCsprojPath, targetFramework);
+
                 EnsurePropertyInCsproj(templateCsprojPath, "Nullable", "enable");
 
-                // Pass important information to the template through custom parameters so it can be used in template variable replacements.
-                EnsureCustomParameterInVstemplate(vstemplatePath, "$rootnamespace$", fullProjectName);
-                EnsureCustomParameterInVstemplate(vstemplatePath, "$projectnamespace$", fullProjectName);
-                EnsureCustomParameterInVstemplate(vstemplatePath, "$shortprojectname$", shortProjectName);
-                EnsureCustomParameterInVstemplate(vstemplatePath, "$basenamespace$", baseNamespace);
+                // Pass template parameters.
+                EnsureCustomParameterInVstemplate(vstemplatePath, "$projectname$", projectName);
+                EnsureCustomParameterInVstemplate(vstemplatePath, "$shortprojectname$", projectName);
+                EnsureCustomParameterInVstemplate(vstemplatePath, "$projectnamespace$", normalizedProjectNamespace);
+                EnsureCustomParameterInVstemplate(vstemplatePath, "$rootnamespace$", normalizedProjectNamespace);
 
-                // Add the customized project template to the solution or to the selected solution folder.
-                AddProjectFromTemplate(dte, solution2, vstemplatePath, projectDir, fullProjectName, _selectedSolutionFolderRelativePath);
+                // Create the project.
+                AddProjectFromTemplate(dte, solution2, vstemplatePath, projectDir, normalizedProjectNamespace, _selectedSolutionFolderRelativePath);
 
-                // Check again after template creation because project generation may take time.
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // Wait until Visual Studio/template generation has produced the project file on disk.
+                // Wait until the generated project exists on disk.
                 var csprojPath = await WaitForCsprojAsync(projectDir, cancellationToken).ConfigureAwait(false);
 
-                // Normalize important project properties after creation to ensure the generated project is consistent.
+                // Rename the generated project file if required.
+                var expectedCsprojPath = Path.Combine(projectDir, projectFileName);
+
+                if (!string.Equals(csprojPath, expectedCsprojPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Move(csprojPath, expectedCsprojPath);
+
+                    csprojPath = expectedCsprojPath;
+                }
+
+                // Ensure project settings are consistent.
                 EnsurePropertyInCsproj(csprojPath, "Nullable", "enable");
+
                 EnsureTargetFrameworkInCsproj(csprojPath, targetFramework);
 
-                // Important:
-                // These should match the actual generated project identity.
-                EnsurePropertyInCsproj(csprojPath, "RootNamespace", fullProjectName);
-                EnsurePropertyInCsproj(csprojPath, "AssemblyName", fullProjectName);
+                EnsurePropertyInCsproj(csprojPath, "RootNamespace", normalizedProjectNamespace);
 
-                // Update bindable state so the UI reflects the namespace used for generation.
-                //
-                // Keep this as the root/base namespace, not the generated project namespace.
-                // Example:
-                // RootNamespace = SmallBusinessOperations
-                RootNamespace = rootNamespace;
+                EnsurePropertyInCsproj(csprojPath, "AssemblyName", normalizedProjectNamespace);
+
+                // Update the service state to reflect the namespace
+                // used for the generated project.
+                RootNamespace = normalizedProjectNamespace;
             }
             catch (OperationCanceledException)
             {
-                // Preserve cancellation semantics so callers can distinguish cancellation from failure.
                 throw;
             }
             catch (Exception ex)
             {
-                // Report failures through the provided callback instead of throwing into the UI layer.
                 exceptionCallback?.Invoke(ex);
             }
             finally
             {
-                // Clean up the temporary template directory to avoid leaving behind extracted files.
                 TryDeleteDirectory(tempTemplateDir);
             }
         }
@@ -279,6 +314,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             {
                 // Stop immediately if the caller has already requested cancellation.
                 cancellationToken.ThrowIfCancellationRequested();
+
                 // Switch to the UI thread because DTE and Visual Studio shell services are apartment-threaded.
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
@@ -292,8 +328,10 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                     // Exit early since there is no solution context to initialize from.
                     return;
                 }
+
                 // Extract the solution name from the full solution path, removing the file extension to get a clean base name.
                 var solutionName = Path.GetFileNameWithoutExtension(dte.Solution.FullName);
+
                 // If the solution name is null, empty, or whitespace, clear the namespace and selected folder state.
                 if (string.IsNullOrWhiteSpace(solutionName))
                 {
@@ -304,10 +342,18 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                     // Exit early since there is no valid solution name to derive a namespace from.
                     return;
                 }
+
                 // Normalize the solution name to ensure it is a valid namespace segment, removing any invalid characters or formatting issues.
                 solutionName = NormalizeNamespace(solutionName);
-                // Attempt to determine the relative path of the currently selected solution folder in the Solution Explorer, if any.
+
+                // Attempt to determine the relative path of the currently selected
+                // solution folder in Solution Explorer.
                 _selectedSolutionFolderRelativePath = TryGetSelectedSolutionFolderRelativePath(dte);
+
+                // Determine the physical base directory that should be used
+                // for newly generated projects inside the selected solution folder.
+                SuggestedProjectFolderPath = TryResolveSuggestedProjectFolderPath(dte, _selectedSolutionFolderRelativePath);
+
                 // If no solution folder is selected, use the solution name as the root namespace.
                 if (string.IsNullOrWhiteSpace(_selectedSolutionFolderRelativePath))
                 {
@@ -522,39 +568,6 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             return $"{cleanRootNamespace}.{shortProjectName}";
         }
 
-        // Builds the target project directory by combining the solution directory, optional relative solution folder path, and the full project name, ensuring that the resulting path is valid and safe for use in the file system.
-        private static string BuildProjectDirectory(string solutionDir, string? relativeSolutionFolderPath, string fullProjectName)
-        {
-            // Validate inputs to ensure the resulting project directory can be constructed meaningfully.
-            if (string.IsNullOrWhiteSpace(solutionDir))
-                throw new ArgumentException("Solution directory must not be empty.", nameof(solutionDir));
-            // The full project name is required to determine the final project directory; it must not be empty or whitespace.
-            if (string.IsNullOrWhiteSpace(fullProjectName))
-                throw new ArgumentException("Full project name must not be empty.", nameof(fullProjectName));
-            // Normalize the solution directory to ensure it is a valid path and does not contain any trailing directory separators that could affect path combination.
-            var baseDirectory = solutionDir;
-            // If a relative solution folder path is provided, split it into safe segments and combine them with the base directory to form the target project directory.
-            if (!string.IsNullOrWhiteSpace(relativeSolutionFolderPath))
-            {
-                // Split the relative solution folder path into segments, normalize them to safe path segments, and filter out any empty or whitespace segments to ensure a valid directory structure.
-                var safeSegments = relativeSolutionFolderPath?.Replace('\\', '/').Split(['/'], StringSplitOptions.RemoveEmptyEntries).Select(ToSafePathSegment).Where(s => !string.IsNullOrWhiteSpace(s)).ToArray();
-                // If there are any valid safe segments, combine them with the base directory to form the target project directory.
-                if (safeSegments?.Length > 0)
-                {
-                    // Combine each safe segment with the base directory to build the full path to the target project directory.
-                    foreach (var segment in safeSegments)
-                        // Combine the current base directory with the next safe segment to progressively build the full path.
-                        baseDirectory = Path.Combine(baseDirectory, segment);
-                }
-            }
-            // Combine the base directory (which may include solution folder segments) with the safe version of the full project name to determine the final project directory for generation.
-            var projectDirectory = Path.Combine(baseDirectory, ToSafePathSegment(fullProjectName));
-            // Validate that the computed project directory is indeed a subdirectory of the solution directory to prevent accidental generation outside the solution scope.
-            EnsurePathIsInsideDirectory(solutionDir, projectDirectory);
-            // Return the computed project directory for use in project generation.
-            return projectDirectory;
-        }
-
         // Builds a short project name for template parameters by removing the root namespace prefix from the user-entered project name, if it exists, to allow for cleaner class and namespace generation within the template.
         private static string BuildShortProjectName(string rootNamespace, string projectName)
         {
@@ -595,6 +608,39 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             // If there are no dots, the short name is the same as the project name.
             return cleanProjectName;
         }
+
+        private static void CollectProjectDirectories(ProjectItems? projectItems, List<string> directories)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (projectItems == null)
+                return;
+
+            foreach (ProjectItem item in projectItems)
+            {
+                var subProject = item.SubProject;
+
+                if (subProject == null)
+                    continue;
+
+                if (IsSolutionFolder(subProject))
+                {
+                    CollectProjectDirectories(subProject.ProjectItems, directories);
+
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(subProject.FullName))
+                    continue;
+
+                var directory = Path.GetDirectoryName(subProject.FullName);
+
+                if (!string.IsNullOrWhiteSpace(directory))
+                    directories.Add(directory);
+            }
+        }
+
+        private static string EnsureCsprojExtension(string projectFileName) => projectFileName.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase) ? projectFileName : $"{projectFileName}.csproj";
 
         // Ensures a custom parameter with the specified name and value exists in the .vstemplate file, which allows passing information to the template during project creation.
         private static void EnsureCustomParameterInVstemplate(string vstemplatePath, string parameterName, string value)
@@ -724,21 +770,38 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             doc.Save(csprojPath);
         }
 
-        // Extracts the last segment of a path or namespace-like string, which is useful for determining the project name from user input that may include directories or namespace separators.
-        private static string ExtractLastPathOrNamespaceSegment(string value)
+        private static string? GetCommonProjectDirectory(IReadOnlyList<string> directories)
         {
-            // If the input is null, empty, or whitespace, return an empty string to avoid processing invalid data.
-            if (string.IsNullOrWhiteSpace(value))
-                return string.Empty;
-            // Normalize the input by trimming whitespace, replacing backslashes with forward slashes, and removing leading/trailing slashes or dots to prepare for splitting.
-            var normalized = value.Trim().Replace('\\', '/').Trim('/', '.');
-            // Split the normalized input into segments based on slashes and dots, trimming whitespace and filtering out empty segments to isolate the last meaningful segment.
-            var parts = normalized.Split(['/', '.'], StringSplitOptions.RemoveEmptyEntries).Select(p => p.Trim()).Where(p => !string.IsNullOrWhiteSpace(p)).ToArray();
-            // If no valid segments are found, return the normalized input as a fallback.
-            if (parts.Length == 0)
-                return normalized;
-            // Return the last segment, which represents the most specific part of the path or namespace, suitable for use as a project name or namespace segment.
-            return parts[parts.Length - 1];
+            if (directories.Count == 0)
+                return null;
+
+            var separator = Path.DirectorySeparatorChar;
+
+            var splitDirectories = directories.Select(d => d.Split(separator)).ToArray();
+
+            var commonParts = new List<string>();
+
+            for (int i = 0; ; i++)
+            {
+                if (splitDirectories.Any(d => i >= d.Length))
+                    break;
+
+                var candidate = splitDirectories[0][i];
+
+                if (splitDirectories.All(d => string.Equals(d[i], candidate, StringComparison.OrdinalIgnoreCase)))
+                {
+                    commonParts.Add(candidate);
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (commonParts.Count == 0)
+                return null;
+
+            return Path.Combine([.. commonParts]);
         }
 
         // Recursively constructs the relative path of a solution folder project within the solution hierarchy by traversing its parent projects.
@@ -893,17 +956,6 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             return string.Join(".", segments);
         }
 
-        // Converts an arbitrary string into a safe path segment by removing invalid characters and trimming whitespace.
-        private static string ToSafePathSegment(string segment)
-        {
-            // Validate input to ensure a meaningful path segment can be constructed.
-            var invalid = Path.GetInvalidFileNameChars();
-            // Remove any characters that are not valid in file or directory names to ensure the segment can be used safely in the file system.
-            var filtered = new string([.. segment.Where(ch => !invalid.Contains(ch))]).Trim();
-            // If the resulting segment is empty or whitespace after filtering, return a safe placeholder to avoid invalid path segments.
-            return string.IsNullOrWhiteSpace(filtered) ? "_" : filtered;
-        }
-
         // Tries to delete a directory and its contents, ignoring any exceptions that may occur (e.g., if files are locked by Visual Studio).
         private static void TryDeleteDirectory(string? directoryPath)
         {
@@ -1012,7 +1064,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 // If the selected item is not a UIHierarchyItem, we cannot determine the solution folder context.
                 return null;
             // Initialize a variable to hold the selected project, which may be a solution folder or a regular project.
-            Project? selectedProject = null;
+            Project? selectedProject;
 
             // Case 1: Visual Studio delivers a Project directly when a solution folder is selected in Solution Explorer.
             selectedProject = selectedItem.Object as Project;
@@ -1034,6 +1086,53 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 return null;
             // If we have a valid solution folder project, we can compute its relative path within the solution by traversing its parent hierarchy.
             return GetSolutionFolderRelativePath(selectedProject);
+        }
+
+        private static string? TryResolveSuggestedProjectFolderPath(EnvDTE80.DTE2 dte, string? selectedSolutionFolderRelativePath)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (string.IsNullOrWhiteSpace(selectedSolutionFolderRelativePath))
+                return null;
+
+            if (!TryFindSolutionFolderProject(dte.Solution, selectedSolutionFolderRelativePath, out var solutionFolderProject))
+            {
+                return null;
+            }
+
+            var projectDirectories = new List<string>();
+
+            CollectProjectDirectories(solutionFolderProject.ProjectItems, projectDirectories);
+
+            // Empty solution folder:
+            // No physical projects exist yet, therefore no physical path can be inferred.
+            // Fall back to the logical solution-folder path and let the generator create
+            // the physical directory structure on first project creation.
+            if (projectDirectories.Count == 0)
+            {
+                return selectedSolutionFolderRelativePath;
+            }
+
+            var commonDirectory = GetCommonProjectDirectory(projectDirectories);
+
+            if (string.IsNullOrWhiteSpace(commonDirectory))
+            {
+                return selectedSolutionFolderRelativePath;
+            }
+
+            var solutionDirectory = Path.GetDirectoryName(dte.Solution.FullName);
+
+            if (string.IsNullOrWhiteSpace(solutionDirectory))
+            {
+                return selectedSolutionFolderRelativePath;
+            }
+
+            if (!commonDirectory!.StartsWith(solutionDirectory, StringComparison.OrdinalIgnoreCase))
+            {
+                return selectedSolutionFolderRelativePath;
+            }
+
+            return commonDirectory.Substring(solutionDirectory.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
         // Waits asynchronously for a .csproj file to appear in the specified project directory, which indicates that Visual Studio has completed project creation from the template.
