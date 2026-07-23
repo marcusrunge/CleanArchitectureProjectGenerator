@@ -183,6 +183,8 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 // Resolve the physical project directory relative to the solution root.
                 var projectDir = Path.Combine(solutionDir, projectFolderPath);
 
+                EnsurePathIsInsideDirectory(solutionDir ?? "", projectDir);
+
                 // Ensure the destination directory exists.
                 Directory.CreateDirectory(projectDir);
 
@@ -190,9 +192,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 // are apartment-threaded.
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
-                var dte = _serviceProvider?.GetService(typeof(SDTE)) as EnvDTE80.DTE2;
-
-                if (dte?.Solution is null)
+                if (_serviceProvider.GetService(typeof(SDTE)) is not EnvDTE80.DTE2 dte || dte.Solution == null)
                     throw new InvalidOperationException("DTE/Solution service is not available.");
 
                 var solution2 = (EnvDTE80.Solution2)dte.Solution;
@@ -1088,12 +1088,55 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             return GetSolutionFolderRelativePath(selectedProject);
         }
 
+        private static string? TryResolveParentSolutionFolderPhysicalPath(EnvDTE80.DTE2 dte, Project solutionFolderProject)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            // Guard against missing solution information when this helper is called independently.
+            if (dte == null || dte.Solution == null || string.IsNullOrWhiteSpace(dte.Solution.FullName))
+                return null;
+
+            var parentProjectItem = solutionFolderProject.ParentProjectItem;
+            var parentProject = parentProjectItem?.ContainingProject;
+
+            if (parentProject == null || !IsSolutionFolder(parentProject))
+                return null;
+
+            var parentProjectDirectories = new List<string>();
+            CollectProjectDirectories(parentProject.ProjectItems, parentProjectDirectories);
+
+            if (parentProjectDirectories.Count == 0)
+                return null;
+
+            var commonDirectory = GetCommonProjectDirectory(parentProjectDirectories);
+
+            if (string.IsNullOrWhiteSpace(commonDirectory))
+                return null;
+
+            var solutionDirectory = Path.GetDirectoryName(dte.Solution.FullName);
+
+            if (string.IsNullOrWhiteSpace(solutionDirectory))
+                return null;
+
+            if (commonDirectory == null || !commonDirectory.StartsWith(solutionDirectory, StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            return commonDirectory.Substring(solutionDirectory.Length).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
         private static string? TryResolveSuggestedProjectFolderPath(EnvDTE80.DTE2 dte, string? selectedSolutionFolderRelativePath)
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
             if (string.IsNullOrWhiteSpace(selectedSolutionFolderRelativePath))
                 return null;
+
+            // Guard against missing solution information when this helper is called independently.
+            if (dte.Solution == null || string.IsNullOrWhiteSpace(dte.Solution.FullName))
+            {
+                // Fall back to the logical relative path if no solution is available.
+                return selectedSolutionFolderRelativePath;
+            }
 
             if (!TryFindSolutionFolderProject(dte.Solution, selectedSolutionFolderRelativePath, out var solutionFolderProject))
             {
@@ -1110,6 +1153,11 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
             // the physical directory structure on first project creation.
             if (projectDirectories.Count == 0)
             {
+                var parentRelativePath = TryResolveParentSolutionFolderPhysicalPath(dte, solutionFolderProject);
+
+                if (!string.IsNullOrWhiteSpace(parentRelativePath))
+                    return Path.Combine(parentRelativePath, solutionFolderProject.Name);
+
                 return selectedSolutionFolderRelativePath;
             }
 
@@ -1127,7 +1175,7 @@ namespace MarcusRunge.CleanArchitectureProjectGenerator.Services
                 return selectedSolutionFolderRelativePath;
             }
 
-            if (!commonDirectory!.StartsWith(solutionDirectory, StringComparison.OrdinalIgnoreCase))
+            if (commonDirectory == null || !commonDirectory.StartsWith(solutionDirectory, StringComparison.OrdinalIgnoreCase))
             {
                 return selectedSolutionFolderRelativePath;
             }
