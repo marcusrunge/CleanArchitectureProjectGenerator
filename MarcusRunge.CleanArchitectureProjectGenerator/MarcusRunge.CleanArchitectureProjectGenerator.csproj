@@ -31,7 +31,7 @@
 
 		<Copyright>© 2026 Marcus Runge</Copyright>
 
-		<Version>1.4.1</Version>
+		<Version>1.4.2</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -50,7 +50,7 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime;build;native;contentfiles;analyzers;buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.142" />
+		<PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.158" />
 	</ItemGroup>
 
 	<ItemGroup>
