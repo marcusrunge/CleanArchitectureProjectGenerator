@@ -31,7 +31,7 @@
 
 		<Copyright>© 2026 Marcus Runge</Copyright>
 
-		<Version>1.4.2</Version>
+		<Version>1.4.3</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -44,13 +44,13 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="MessagePack" Version="3.1.8" />
+		<PackageReference Include="MessagePack" Version="3.1.12" />
 		<PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.14.40265" ExcludeAssets="runtime" />
 		<PackageReference Include="Microsoft.VSSDK.BuildTools" Version="18.5.40034">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime;build;native;contentfiles;analyzers;buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.158" />
+		<PackageReference Include="Microsoft.Xaml.Behaviors.Wpf" Version="1.1.161" />
 	</ItemGroup>
 
 	<ItemGroup>
