@@ -3,6 +3,7 @@
     <File Path=".github/ISSUE_TEMPLATE/bug_report.md" />
     <File Path=".github/ISSUE_TEMPLATE/feature_request.md" />
     <File Path=".github/workflows/ci-vsix.yml" />
+    <File Path="global.json" />
     <File Path="README.md" />
   </Folder>
   <Project Path="MarcusRunge.CleanArchitectureProjectGenerator/MarcusRunge.CleanArchitectureProjectGenerator.csproj">
